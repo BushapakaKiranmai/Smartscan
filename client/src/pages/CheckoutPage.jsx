@@ -369,14 +369,15 @@ export const CheckoutPage = () => {
         </div>
       </div>
 
-      {/* Pay Now Button */}
+      {/* Proceed to Payment Button */}
       <button
         type="button"
+        id="proceed-to-payment-btn"
         onClick={handleStartPayment}
         disabled={loading || timeLeftSeconds <= 0}
         className="btn btn-primary btn-lg btn-block"
         style={{
-          padding: '15px',
+          padding: '16px',
           fontSize: '1.05rem',
           fontWeight: 900,
           borderRadius: 'var(--radius-md)',
@@ -388,7 +389,7 @@ export const CheckoutPage = () => {
         }}
       >
         <Icons.CreditCard size={22} />
-        <span>Pay {formatPaise(order.pricing?.finalPayableAmountPaise)} via Razorpay</span>
+        <span>Proceed to Payment ({formatPaise(order.pricing?.finalPayableAmountPaise)})</span>
       </button>
 
       <div style={{ textAlign: 'center', marginTop: '14px', fontSize: '0.76rem', color: 'var(--text-muted)' }}>
