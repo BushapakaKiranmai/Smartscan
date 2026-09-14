@@ -14,26 +14,43 @@ const app = express();
 app.use(helmet());
 
 // CORS Configuration
-const clientUrl = process.env.CLIENT_URL || 'http://localhost:5173';
+const allowedOrigins = [
+  'https://smartscan-rho.vercel.app',
+  'http://localhost:5173'
+];
+
+if (process.env.CLIENT_URL) {
+  const envClientUrl = process.env.CLIENT_URL.trim().replace(/\/+$/, '');
+  if (envClientUrl && !allowedOrigins.includes(envClientUrl)) {
+    allowedOrigins.push(envClientUrl);
+  }
+}
+
 app.use(
   cors({
     origin: (origin, callback) => {
-      // Allow requests with no origin (e.g. mobile apps, curl, tests) or local development origins
+      // Allow requests with no origin (e.g. mobile apps, curl, server-to-server tests)
+      if (!origin) {
+        return callback(null, true);
+      }
+
+      const normalizedOrigin = origin.trim().replace(/\/+$/, '');
+
       if (
-        !origin ||
-        origin === clientUrl ||
-        origin.startsWith('http://localhost:') ||
-        origin.startsWith('http://127.0.0.1:') ||
+        allowedOrigins.includes(normalizedOrigin) ||
+        normalizedOrigin.startsWith('http://localhost:') ||
+        normalizedOrigin.startsWith('http://127.0.0.1:') ||
         process.env.NODE_ENV !== 'production'
       ) {
-        callback(null, true);
-      } else {
-        callback(new Error('Blocked by CORS policy'));
+        return callback(null, true);
       }
+
+      return callback(new Error('Blocked by CORS policy'));
     },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'x-branch-id', 'X-Branch-Id']
+    allowedHeaders: ['Content-Type', 'Authorization', 'x-branch-id', 'X-Branch-Id'],
+    optionsSuccessStatus: 204
   })
 );
 
