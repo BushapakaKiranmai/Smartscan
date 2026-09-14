@@ -1,0 +1,29 @@
+{
+  "name": "smartscan-pay",
+  "version": "1.0.0",
+  "description": "SmartScan & Pay — Production Full-Stack Supermarket Self-Checkout System",
+  "private": true,
+  "scripts": {
+    "install:all": "npm install && npm install --prefix server && npm install --prefix client",
+    "server": "npm run dev --prefix server",
+    "client": "npm run dev --prefix client",
+    "dev": "concurrently \"npm run server\" \"npm run client\"",
+    "test:server": "npm test --prefix server",
+    "build:client": "npm run build --prefix client",
+    "seed": "npm run seed --prefix server"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  },
+  "keywords": [
+    "self-checkout",
+    "supermarket",
+    "barcode-scanner",
+    "razorpay",
+    "express",
+    "react",
+    "mongodb"
+  ],
+  "author": "SmartScanPay Architecture Team",
+  "license": "UNLICENSED"
+}
