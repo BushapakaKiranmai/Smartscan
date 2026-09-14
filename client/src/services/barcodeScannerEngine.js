@@ -46,7 +46,7 @@ class BarcodeScannerEngine {
 
     this.lastDetectedCode = '';
     this.lastDetectedAt = 0;
-    this.sameCodeCooldown = 900; // ms
+    this.sameCodeCooldown = 2800; // ms between consecutive scans of the exact same barcode
 
     this.torchSupported = false;
     this.torchOn = false;

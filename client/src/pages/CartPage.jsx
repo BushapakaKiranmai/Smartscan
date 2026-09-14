@@ -281,26 +281,42 @@ export const CartPage = () => {
               </div>
             </div>
 
-            {/* Quantity Stepper & Line Subtotal */}
+            {/* Read-Only Quantity Display & Subtotal */}
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '6px' }}>
-              <div className="stepper-pill">
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    padding: '4px 10px',
+                    borderRadius: 'var(--radius-full)',
+                    background: 'var(--bg-surface-muted)',
+                    border: '1px solid var(--border-subtle)',
+                    fontSize: '0.82rem',
+                    fontWeight: 800,
+                    color: 'var(--text-primary)',
+                    letterSpacing: '0.02em'
+                  }}
+                >
+                  Quantity: {item.quantity}
+                </span>
                 <button
                   type="button"
-                  onClick={() => updateQuantity(item.productId, item.quantity - 1)}
-                  className="stepper-btn"
-                  aria-label="Decrease quantity"
+                  onClick={() => removeItem(item.productId)}
+                  className="btn btn-ghost btn-sm"
+                  style={{
+                    padding: '4px 6px',
+                    color: 'var(--text-muted)',
+                    borderRadius: '8px',
+                    lineHeight: 1,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}
+                  title="Remove from cart"
+                  aria-label={`Remove ${item.name} from cart`}
                 >
-                  <Icons.Minus size={13} />
-                </button>
-                <span className="stepper-count">{item.quantity}</span>
-                <button
-                  type="button"
-                  onClick={() => updateQuantity(item.productId, item.quantity + 1)}
-                  disabled={item.quantity >= 20 || item.quantity >= item.availableStock}
-                  className="stepper-btn"
-                  aria-label="Increase quantity"
-                >
-                  <Icons.Plus size={13} />
+                  <Icons.Trash2 size={15} />
                 </button>
               </div>
 

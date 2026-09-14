@@ -184,117 +184,35 @@ export const RazorpayModal = ({ order, paymentData, onPaymentSuccess, onCancel }
         }
       };
 
-      // Method-specific Razorpay Checkout configurations
-      if (selectedMethod === 'google_pay') {
-        options.config = {
-          display: {
-            blocks: {
-              upi: {
-                name: 'Pay with Google Pay',
-                instruments: [
-                  {
-                    method: 'upi',
-                    flows: ['intent'],
-                    apps: ['google_pay']
-                  }
-                ]
-              }
-            },
-            sequence: ['block.upi'],
-            preferences: { show_default_blocks: true }
-          }
-        };
-      } else if (selectedMethod === 'phonepe') {
-        options.config = {
-          display: {
-            blocks: {
-              upi: {
-                name: 'Pay with PhonePe',
-                instruments: [
-                  {
-                    method: 'upi',
-                    flows: ['intent'],
-                    apps: ['phonepe']
-                  }
-                ]
-              }
-            },
-            sequence: ['block.upi'],
-            preferences: { show_default_blocks: true }
-          }
-        };
-      } else if (selectedMethod === 'other_upi') {
-        options.config = {
-          display: {
-            blocks: {
-              upi: {
-                name: 'Pay with UPI App',
-                instruments: [
-                  {
-                    method: 'upi',
-                    flows: ['intent', 'qr']
-                  }
-                ]
-              }
-            },
-            sequence: ['block.upi'],
-            preferences: { show_default_blocks: true }
-          }
-        };
-      } else if (selectedMethod === 'upi_qr') {
-        options.config = {
-          display: {
-            blocks: {
-              upi: {
-                name: 'Scan & Pay with UPI QR',
-                instruments: [
-                  {
-                    method: 'upi',
-                    flows: ['qr']
-                  }
-                ]
-              }
-            },
-            sequence: ['block.upi'],
-            preferences: { show_default_blocks: true }
-          }
-        };
+      // Pre-select payment method cleanly via Razorpay Checkout standard prefill.method
+      // (Avoids unsupported client-side intent filter blocks that trigger gateway failures)
+      if (selectedMethod === 'google_pay' || selectedMethod === 'phonepe' || selectedMethod === 'other_upi' || selectedMethod === 'upi_qr') {
+        options.prefill.method = 'upi';
       } else if (selectedMethod === 'card') {
-        options.config = {
-          display: {
-            blocks: {
-              card: {
-                name: 'Credit or Debit Card',
-                instruments: [{ method: 'card' }]
-              }
-            },
-            sequence: ['block.card'],
-            preferences: { show_default_blocks: true }
-          }
-        };
+        options.prefill.method = 'card';
       } else if (selectedMethod === 'netbanking') {
-        options.config = {
-          display: {
-            blocks: {
-              netbanking: {
-                name: 'Net Banking',
-                instruments: [{ method: 'netbanking' }]
-              }
-            },
-            sequence: ['block.netbanking'],
-            preferences: { show_default_blocks: true }
-          }
-        };
+        options.prefill.method = 'netbanking';
       }
 
       const rzp = new window.Razorpay(options);
 
       rzp.on('payment.failed', (res) => {
-        console.warn('[Razorpay] Payment failed event:', res.error?.description);
+        const err = res?.error || {};
+        console.warn('[Razorpay Error] Code:', err.code);
+        console.warn('[Razorpay Error] Description:', err.description);
+        console.warn('[Razorpay Error] Reason:', err.reason);
+        console.warn('[Razorpay Error] Source:', err.source);
+        console.warn('[Razorpay Error] Step:', err.step);
+        if (err.metadata?.order_id) {
+          console.warn('[Razorpay Error] Order ID:', err.metadata.order_id);
+        }
         isSubmittingRef.current = false;
         setPaymentState('FAILED');
-        setFailureReason(res.error?.description || 'Payment rejected by bank.');
-        toast.error(res.error?.description || 'Payment was unsuccessful.');
+        const userMsg = err.description
+          ? `${err.description} Please try another payment method.`
+          : 'Payment could not be completed. Please try another payment method.';
+        setFailureReason(userMsg);
+        toast.error(userMsg);
       });
 
       rzpInstanceRef.current = rzp;
@@ -702,6 +620,28 @@ export const RazorpayModal = ({ order, paymentData, onPaymentSuccess, onCancel }
           /* VIEW 4: METHOD SELECTION & PAY BUTTON                */
           /* ==================================================== */
           <div>
+            {activeKeyId.startsWith('rzp_test_') && (
+              <div
+                style={{
+                  padding: '10px 12px',
+                  borderRadius: '12px',
+                  background: 'rgba(59, 130, 246, 0.08)',
+                  border: '1px solid rgba(59, 130, 246, 0.25)',
+                  marginBottom: '14px',
+                  fontSize: '0.78rem',
+                  color: 'var(--text-secondary)',
+                  lineHeight: 1.4
+                }}
+              >
+                <div style={{ fontWeight: 800, color: '#2563eb', marginBottom: '2px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span>⚡ Razorpay Test Mode Active</span>
+                </div>
+                <div>
+                  Real UPI apps cannot process live sandbox payments. For test payment, select <strong>Other UPI Apps</strong> and enter test VPA <code style={{ color: '#2563eb', fontWeight: 700 }}>success@razorpay</code>, use <strong>Card</strong> (test cards), or click below to simulate.
+                </div>
+              </div>
+            )}
+
             <div
               style={{
                 fontSize: '0.88rem',

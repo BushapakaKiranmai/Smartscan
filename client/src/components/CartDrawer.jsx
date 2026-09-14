@@ -224,28 +224,41 @@ export const CartDrawer = () => {
                   </div>
                 </div>
 
-                {/* Stepper Controls */}
+                {/* Read-Only Quantity Display & Subtotal */}
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '6px' }}>
-                  <div className="stepper-pill" style={{ padding: '2px' }}>
-                    <button
-                      type="button"
-                      onClick={() => updateQuantity(item.productId, item.quantity - 1)}
-                      className="stepper-btn"
-                      style={{ width: '24px', height: '24px' }}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        padding: '2px 8px',
+                        borderRadius: 'var(--radius-full)',
+                        background: 'var(--bg-surface-muted)',
+                        border: '1px solid var(--border-subtle)',
+                        fontSize: '0.78rem',
+                        fontWeight: 800,
+                        color: 'var(--text-primary)'
+                      }}
                     >
-                      <Icons.Minus size={12} />
-                    </button>
-                    <span className="stepper-count" style={{ fontSize: '0.85rem', minWidth: '22px' }}>
-                      {item.quantity}
+                      Qty: {item.quantity}
                     </span>
                     <button
                       type="button"
-                      onClick={() => updateQuantity(item.productId, item.quantity + 1)}
-                      disabled={item.quantity >= 20 || item.quantity >= item.availableStock}
-                      className="stepper-btn"
-                      style={{ width: '24px', height: '24px' }}
+                      onClick={() => removeItem(item.productId)}
+                      className="btn btn-ghost btn-sm"
+                      style={{
+                        padding: '2px 4px',
+                        color: 'var(--text-muted)',
+                        borderRadius: '6px',
+                        lineHeight: 1,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center'
+                      }}
+                      title="Remove from cart"
+                      aria-label={`Remove ${item.name} from cart`}
                     >
-                      <Icons.Plus size={12} />
+                      <Icons.Trash2 size={13} />
                     </button>
                   </div>
 

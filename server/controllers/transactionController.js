@@ -124,6 +124,11 @@ exports.createTransaction = async (req, res) => {
       status: 'pending'
     });
 
+    console.log(`[Razorpay] Transaction ID: ${transaction._id}`);
+    console.log(`[Razorpay] Expected amount: ${Math.round(totalAmount * 100)} paise`);
+    console.log(`[Razorpay] Razorpay order ID: ${razorpayOrderId}`);
+    console.log(`[Razorpay] Currency: INR`);
+
     const responsePayload = {
       success: true,
       transaction,
@@ -756,6 +761,11 @@ exports.createPaymentOrder = async (req, res) => {
       transaction.razorpayOrderId = razorpayOrderId;
       await transaction.save();
     }
+
+    console.log(`[Razorpay] Transaction ID: ${transaction._id}`);
+    console.log(`[Razorpay] Expected amount: ${Math.round(transaction.totalAmount * 100)} paise`);
+    console.log(`[Razorpay] Razorpay order ID: ${razorpayOrderId}`);
+    console.log(`[Razorpay] Currency: INR`);
 
     const keyId = (process.env.RAZORPAY_KEY_ID || '').trim();
 

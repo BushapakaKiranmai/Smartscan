@@ -104,13 +104,16 @@ export const ScannerPage = () => {
         return;
       }
 
-      // Duplicate scan prevention: ignore rapid duplicate frames of the same physical barcode within 1.5s
+      // Duplicate scan prevention: ignore rapid duplicate frames of the same physical barcode within 2.8s
+      // 1 successful barcode scan = exactly 1 physical item.
+      // Repeated camera frames of the same barcode while held in view are debounced.
       const now = Date.now();
+      const SAME_BARCODE_COOLDOWN_MS = 2800;
       if (
         lastScannedBarcodeRef.current === cleanBarcode &&
-        now - lastScanTimeRef.current < 1500
+        now - lastScanTimeRef.current < SAME_BARCODE_COOLDOWN_MS
       ) {
-        console.log('[SCANNER] Duplicate barcode ignored by frame cooldown:', cleanBarcode);
+        // Continuous camera frames of the same physical item
         return;
       }
 
@@ -212,7 +215,7 @@ export const ScannerPage = () => {
           return;
         }
 
-        // Step 5: Check Current Cart Limit
+        // Step 5: Check Current Cart Limit (Reject if adding exceeds branch stock)
         const existingInCart = items.find(
           (item) =>
             (cleanBarcode && item.barcode === cleanBarcode) ||
@@ -224,9 +227,9 @@ export const ScannerPage = () => {
         if (currentQty >= availableStock) {
           playErrorBeep(soundEnabled);
           setScanState('ERROR');
-          const message = `Only ${availableStock} units of "${product.name}" are available in stock.`;
+          const message = `Only ${availableStock} units available at this branch.`;
           setScanErrorMsg(message);
-          toast.warning(`Only ${availableStock} available.`);
+          toast.warning(message);
 
           if (errorTimerRef.current) {
             clearTimeout(errorTimerRef.current);
