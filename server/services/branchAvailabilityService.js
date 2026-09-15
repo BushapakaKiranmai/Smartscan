@@ -69,6 +69,7 @@ const initBranchAvailability = async () => {
             branchId: branch._id,
             productId: prod._id,
             stockQuantity: stock,
+            reservedQuantity: 0,
             available: isAvailable,
             updatedAt: new Date()
           },

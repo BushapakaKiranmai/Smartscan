@@ -20,6 +20,11 @@ const branchInventorySchema = new mongoose.Schema(
       default: 0,
       min: [0, 'Stock quantity cannot be negative']
     },
+    reservedQuantity: {
+      type: Number,
+      default: 0,
+      min: [0, 'Reserved quantity cannot be negative']
+    },
     available: {
       type: Boolean,
       required: true,

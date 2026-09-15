@@ -20,6 +20,8 @@ router.post('/create-order', authenticate, transactionController.createPaymentOr
  */
 router.post('/verify', authenticate, transactionController.verifyPayment);
 router.post('/:id/verify', authenticate, transactionController.verifyPayment);
+router.post('/cancel', authenticate, transactionController.cancelTransaction);
+router.post('/:id/cancel', authenticate, transactionController.cancelTransaction);
 router.post('/simulate-upi', authenticate, transactionController.simulateInboundUpiPayment);
 router.post('/:id/simulate-upi', authenticate, transactionController.simulateInboundUpiPayment);
 

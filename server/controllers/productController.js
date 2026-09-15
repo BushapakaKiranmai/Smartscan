@@ -54,8 +54,9 @@ exports.getProductByBarcode = async (req, res) => {
       let branchStock = 0;
 
       if (inventory) {
-        isAvailable = inventory.available && inventory.stockQuantity > 0;
-        branchStock = inventory.stockQuantity;
+        const availableUnits = Math.max(0, inventory.stockQuantity - (inventory.reservedQuantity || 0));
+        isAvailable = inventory.available && availableUnits > 0;
+        branchStock = availableUnits;
       } else {
         // Very important requirement: if no inventory record exists, treat as NOT AVAILABLE
         isAvailable = false;
@@ -145,8 +146,9 @@ exports.searchProducts = async (req, res) => {
         const inv = inventoryMap.get(pId);
         // CRITICAL RULE: If no inventory record exists, treat as NOT AVAILABLE
         if (inv) {
-          available = Boolean(inv.available) && inv.stockQuantity > 0;
-          stockQuantity = inv.stockQuantity;
+          const availableUnits = Math.max(0, inv.stockQuantity - (inv.reservedQuantity || 0));
+          available = Boolean(inv.available) && availableUnits > 0;
+          stockQuantity = availableUnits;
         } else {
           available = false;
           stockQuantity = 0;

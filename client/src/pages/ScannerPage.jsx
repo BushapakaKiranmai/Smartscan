@@ -215,19 +215,17 @@ export const ScannerPage = () => {
           return;
         }
 
-        // Step 5: Check Current Cart Limit (Reject if adding exceeds branch stock)
+        // Step 5: Check Current Cart Limit (ONE USER + ONE PRODUCT = MAXIMUM ONE ITEM)
         const existingInCart = items.find(
           (item) =>
             (cleanBarcode && item.barcode === cleanBarcode) ||
             item.productId === (product._id || product.id)
         );
 
-        const currentQty = existingInCart ? Number(existingInCart.quantity || 0) : 0;
-
-        if (currentQty >= availableStock) {
+        if (existingInCart) {
           playErrorBeep(soundEnabled);
           setScanState('ERROR');
-          const message = `Only ${availableStock} units available at this branch.`;
+          const message = 'This product is already in your cart.';
           setScanErrorMsg(message);
           toast.warning(message);
 
@@ -258,13 +256,12 @@ export const ScannerPage = () => {
           mrpPaise: Math.round(price * 100)
         };
 
-        addItem(cleanBarcode, product._id || product.id, 1, prodData);
+        await addItem(cleanBarcode, product._id || product.id, 1, prodData);
         console.log('[CART] Product added to cart:', product.name);
 
         // Step 7: Product Added & Small Success Notification
         setScanState('PRODUCT_ADDED');
 
-        const newCartQuantity = currentQty + 1;
         const newTotalCount = itemCount + 1;
         const newTotalAmount = (totalAmount || 0) + price;
 
@@ -273,7 +270,7 @@ export const ScannerPage = () => {
           branchName: selectedBranch?.name || branchAvail?.branchName || 'D Mart Kukatpally',
           barcode: cleanBarcode,
           quantityAdded: 1,
-          currentCartQuantity: newCartQuantity,
+          currentCartQuantity: 1,
           totalCartCount: newTotalCount,
           totalCartAmount: newTotalAmount,
           time: Date.now()
@@ -302,45 +299,38 @@ export const ScannerPage = () => {
         playErrorBeep(soundEnabled);
         setLastFailedBarcode(cleanBarcode);
 
+        const errorCode = err?.response?.data?.code || err?.code;
         const statusCode = err?.status || err?.response?.status;
-        const isNotFound =
-          err?.code === 'NOT_REGISTERED' ||
-          statusCode === 404 ||
-          String(err?.message || '').toLowerCase().includes('not found');
 
-        if (isNotFound) {
-          const message = '⚠ Product Not Found';
-          console.warn(`[API] barcode = ${cleanBarcode} - ${message}`);
+        if (errorCode === 'PRODUCT_ALREADY_IN_CART') {
+          const message = 'This product is already in your cart.';
           setScanErrorMsg(message);
           setScanState('ERROR');
+          toast.warning(message);
+        } else if (errorCode === 'PRODUCT_SOLD_OUT' || statusCode === 409) {
+          const message = 'Product not found or sold out.';
+          setScanErrorMsg(message);
+          setScanState('ERROR');
+          toast.error(message);
+        } else {
+          const isNotFound =
+            err?.code === 'NOT_REGISTERED' ||
+            statusCode === 404 ||
+            String(err?.message || '').toLowerCase().includes('not found');
 
-          if (errorTimerRef.current) {
-            clearTimeout(errorTimerRef.current);
+          if (isNotFound) {
+            const message = 'Product not found or sold out.';
+            console.warn(`[API] barcode = ${cleanBarcode} - ${message}`);
+            setScanErrorMsg(message);
+            setScanState('ERROR');
+          } else {
+            const serverMessage = err?.response?.data?.message || err?.response?.data?.error;
+            const message = serverMessage || 'Product not found or sold out.';
+            setScanErrorMsg(message);
+            setScanState('ERROR');
+            toast.error(message);
           }
-
-          errorTimerRef.current = setTimeout(() => {
-            setScanErrorMsg(null);
-            setScanState('READY');
-            setTimeout(() => {
-              setScanState('SCANNING');
-              isProcessingRef.current = false;
-            }, 150);
-          }, 2500);
-
-          return;
         }
-
-        // Generic Network or API Error
-        const serverMessage = err?.response?.data?.message || err?.response?.data?.error;
-        const message = serverMessage
-          ? `API Error: ${serverMessage}`
-          : statusCode
-          ? `API Error: HTTP ${statusCode}`
-          : `Unable to process barcode ${cleanBarcode}.`;
-
-        setScanErrorMsg(message);
-        setScanState('ERROR');
-        toast.error(message);
 
         if (errorTimerRef.current) {
           clearTimeout(errorTimerRef.current);

@@ -278,84 +278,118 @@ export const CartProvider = ({ children }) => {
 
     console.log(`[CART] Adding product for user: ${userId || 'guest'}`);
 
-    // Update local state immediately for fast responsive UI
-    setItems((prevItems) => {
-      const existingIndex = prevItems.findIndex(
-        (i) => (itemBarcode && i.barcode === itemBarcode) || (itemProductId && (i.productId === itemProductId || i._id === itemProductId || i.id === itemProductId))
-      );
+    // Client-side quick check: reject if already in cart
+    const existing = items.some(
+      (i) =>
+        (itemBarcode && i.barcode === itemBarcode) ||
+        (itemProductId && (i.productId === itemProductId || i._id === itemProductId || i.id === itemProductId))
+    );
 
-      if (existingIndex > -1) {
-        const updated = [...prevItems];
-        const existing = updated[existingIndex];
-        const newQty = existing.quantity + numQty;
-
-        if (existing.stock && newQty > existing.stock) {
-          toast.warning(`Only ${existing.stock} items are available.`);
-          return prevItems;
-        }
-
-        const effectivePrice = existing.price || itemPrice;
-        const effectivePaise = existing.unitPricePaise || unitPricePaise || Math.round(effectivePrice * 100);
-
-        updated[existingIndex] = {
-          ...existing,
-          price: effectivePrice,
-          unitPricePaise: effectivePaise,
-          sellingPricePaise: effectivePaise,
-          quantity: newQty,
-          subtotal: effectivePrice * newQty,
-          subtotalPaise: effectivePaise * newQty,
-          lineTotalSellingPricePaise: effectivePaise * newQty
-        };
-        return updated;
-      } else {
-        if (numQty > itemStock) {
-          toast.warning(`Only ${itemStock} items are available.`);
-          return prevItems;
-        }
-
-        const newItem = {
-          productId: itemProductId || `prod_${Date.now()}`,
-          _id: itemProductId || `prod_${Date.now()}`,
-          id: itemProductId || `prod_${Date.now()}`,
-          barcode: itemBarcode,
-          name: itemName || `Item ${itemBarcode}`,
-          price: itemPrice,
-          unitPricePaise: unitPricePaise,
-          sellingPricePaise: unitPricePaise,
-          stock: itemStock,
-          availableStock: itemStock,
-          image: itemImage,
-          images: itemImage ? [{ url: itemImage }] : [],
-          quantity: numQty,
-          subtotal: itemPrice * numQty,
-          subtotalPaise: unitPricePaise * numQty,
-          lineTotalSellingPricePaise: unitPricePaise * numQty
-        };
-        return [...prevItems, newItem];
-      }
-    });
-
-    console.log(`[CART] Cart updated for user: ${userId || 'guest'}`);
-    toast.success('Product added to cart!');
-
-    // Synchronize to backend if authenticated
-    if (userId) {
-      try {
-        await api.post('/cart/items', {
-          productId: itemProductId,
-          barcode: itemBarcode,
-          quantity: numQty
-        });
-      } catch (err) {
-        console.warn('[Cart] Background server sync notice:', err.message);
-      }
+    if (existing) {
+      toast.warning('This product is already in your cart.');
+      return false;
     }
 
-    return true;
+    // Backend is the source of truth for concurrency & reservations
+    if (userId) {
+      try {
+        const res = await api.post('/cart/items', {
+          productId: itemProductId,
+          barcode: itemBarcode,
+          quantity: 1
+        });
+
+        const cartData = res.data?.cart || res.cart || res.data || {};
+        const backendItems = cartData.items || [];
+        if (backendItems.length > 0) {
+          const normalized = backendItems.map((item) => {
+            const pId = item.productId || item.product?._id || item.product || item._id;
+            const price = Number(item.price) || 0;
+            const qty = 1; // Strict single item enforcement
+            const uPaise = item.unitPricePaise || Math.round(price * 100);
+            return {
+              productId: pId,
+              _id: item._id || pId,
+              id: pId,
+              barcode: item.barcode,
+              name: item.name || item.product?.name || 'Item',
+              price,
+              unitPricePaise: uPaise,
+              sellingPricePaise: uPaise,
+              quantity: qty,
+              subtotal: price,
+              subtotalPaise: uPaise,
+              lineTotalSellingPricePaise: uPaise,
+              image: item.image || item.product?.image || null,
+              availableStock: item.stock || item.product?.stock || 999,
+              stock: item.stock || item.product?.stock || 999
+            };
+          });
+          setItems(normalized);
+        } else {
+          // Fallback append single item if backend returned empty array
+          const newItem = {
+            productId: itemProductId || `prod_${Date.now()}`,
+            _id: itemProductId || `prod_${Date.now()}`,
+            id: itemProductId || `prod_${Date.now()}`,
+            barcode: itemBarcode,
+            name: itemName || `Item ${itemBarcode}`,
+            price: itemPrice,
+            unitPricePaise,
+            sellingPricePaise: unitPricePaise,
+            stock: itemStock,
+            availableStock: itemStock,
+            image: itemImage,
+            images: itemImage ? [{ url: itemImage }] : [],
+            quantity: 1,
+            subtotal: itemPrice,
+            subtotalPaise: unitPricePaise,
+            lineTotalSellingPricePaise: unitPricePaise
+          };
+          setItems((prev) => [...prev, newItem]);
+        }
+
+        toast.success('Product added to cart!');
+        return true;
+      } catch (err) {
+        const code = err.response?.data?.code || err.code;
+        const status = err.response?.status || err.status;
+        if (code === 'PRODUCT_ALREADY_IN_CART') {
+          toast.warning('This product is already in your cart.');
+        } else if (code === 'PRODUCT_SOLD_OUT' || status === 409) {
+          toast.error('Product not found or sold out.');
+        } else {
+          toast.error(err.response?.data?.message || 'Failed to add item to cart');
+        }
+        throw err;
+      }
+    } else {
+      // Guest local state mode
+      const newItem = {
+        productId: itemProductId || `prod_${Date.now()}`,
+        _id: itemProductId || `prod_${Date.now()}`,
+        id: itemProductId || `prod_${Date.now()}`,
+        barcode: itemBarcode,
+        name: itemName || `Item ${itemBarcode}`,
+        price: itemPrice,
+        unitPricePaise,
+        sellingPricePaise: unitPricePaise,
+        stock: itemStock,
+        availableStock: itemStock,
+        image: itemImage,
+        images: itemImage ? [{ url: itemImage }] : [],
+        quantity: 1,
+        subtotal: itemPrice,
+        subtotalPaise: unitPricePaise,
+        lineTotalSellingPricePaise: unitPricePaise
+      };
+      setItems((prev) => [...prev, newItem]);
+      toast.success('Product added to cart!');
+      return true;
+    }
   };
 
-  // Update item quantity
+  // Update item quantity (Read-only single item rule)
   const updateQuantity = async (productId, newQuantity) => {
     const qty = parseInt(newQuantity, 10);
     if (isNaN(qty) || qty <= 0) {
@@ -363,38 +397,9 @@ export const CartProvider = ({ children }) => {
       return;
     }
 
-    setItems((prevItems) => {
-      return prevItems.map((item) => {
-        if (item.productId === productId || item.id === productId || item._id === productId || item.barcode === productId) {
-          if (item.stock && qty > item.stock) {
-            toast.warning(`Only ${item.stock} items are available.`);
-            return item;
-          }
-          const price = item.price || 0;
-          const unitPricePaise = item.unitPricePaise || Math.round(price * 100);
-          return {
-            ...item,
-            quantity: qty,
-            price,
-            unitPricePaise,
-            sellingPricePaise: unitPricePaise,
-            subtotal: price * qty,
-            subtotalPaise: unitPricePaise * qty,
-            lineTotalSellingPricePaise: unitPricePaise * qty
-          };
-        }
-        return item;
-      });
-    });
-
-    console.log(`[CART] Cart updated for user: ${userId || 'guest'}`);
-
-    if (userId) {
-      try {
-        await api.patch(`/cart/items/${productId}`, { quantity: qty });
-      } catch (err) {
-        console.warn('[Cart] Server quantity update notice:', err.message);
-      }
+    if (qty > 1) {
+      toast.warning('Only 1 unit per product is allowed in Scan & Go.');
+      return;
     }
   };
 

@@ -6,6 +6,7 @@ const BranchAvailability = require('../models/BranchAvailability');
 const Transaction = require('../models/Transaction');
 const Cart = require('../models/Cart');
 const ExitPass = require('../models/ExitPass');
+const Reservation = require('../models/Reservation');
 const { getRazorpayInstance } = require('../config/razorpay');
 
 /**
@@ -483,12 +484,16 @@ exports.verifyPayment = async (req, res) => {
 
       if (branchInv) {
         const oldStock = Number(branchInv.stockQuantity) || 0;
+        const oldReserved = Number(branchInv.reservedQuantity) || 0;
         const newStock = Math.max(0, oldStock - purchasedQty);
+        const newReserved = Math.max(0, oldReserved - purchasedQty);
+
         branchInv.stockQuantity = newStock;
+        branchInv.reservedQuantity = newReserved;
         branchInv.available = newStock > 0;
         branchInv.updatedAt = new Date();
         await branchInv.save();
-        console.log(`[INVENTORY] Updated branch ${activeBranchId} for prod ${item.productId} (${item.name}): old=${oldStock}, new=${newStock}, available=${branchInv.available}`);
+        console.log(`[INVENTORY] Updated branch ${activeBranchId} for prod ${item.productId} (${item.name}): old=${oldStock}, new=${newStock}, reserved=${newReserved}, available=${branchInv.available}`);
       } else {
         const prod = await Product.findById(item.productId);
         const oldStock = Number(prod?.stock || 50);
@@ -497,10 +502,30 @@ exports.verifyPayment = async (req, res) => {
           branchId: activeBranchId,
           productId: item.productId,
           stockQuantity: newStock,
+          reservedQuantity: 0,
           available: newStock > 0,
           updatedAt: new Date()
         });
         console.log(`[INVENTORY] Created branch ${activeBranchId} for prod ${item.productId} (${item.name}): new=${newStock}`);
+      }
+
+      // Finalize customer's active reservation from 'reserved' -> 'sold'
+      try {
+        await Reservation.findOneAndUpdate(
+          {
+            userId: transaction.userId,
+            branchId: activeBranchId,
+            productId: item.productId,
+            status: 'reserved'
+          },
+          {
+            status: 'sold',
+            transactionId: transaction._id,
+            soldAt: new Date()
+          }
+        );
+      } catch (resFinalizeErr) {
+        console.warn('[Reservation] Finalize reservation notice:', resFinalizeErr.message);
       }
 
       // 2. Keep legacy BranchAvailability in sync
@@ -827,4 +852,81 @@ exports.simulateInboundUpiPayment = async (req, res) => {
     return res.status(500).json({ success: false, message: error.message });
   }
 };
+
+/**
+ * Cancel checkout transaction & release all reserved stock
+ * POST /api/transactions/:id/cancel
+ * POST /api/v1/transactions/:id/cancel
+ */
+exports.cancelTransaction = async (req, res) => {
+  try {
+    const transactionId = req.params.id || req.body.transactionId || req.body.orderId;
+    if (!transactionId) {
+      return res.status(400).json({ success: false, message: 'Transaction ID is required' });
+    }
+
+    const transaction = await Transaction.findById(transactionId);
+    if (!transaction) {
+      return res.status(404).json({ success: false, message: 'Transaction not found' });
+    }
+
+    // Ownership validation
+    const callerRole = (req.user?.role || '').toUpperCase();
+    const isStaffOrAdmin = ['ADMIN', 'SUPER_ADMIN', 'BRANCH_MANAGER', 'BRANCH_STAFF'].includes(callerRole);
+    if (req.user && !isStaffOrAdmin && transaction.userId.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ success: false, message: 'Access denied: You do not own this order' });
+    }
+
+    if (transaction.paymentStatus === 'paid') {
+      return res.status(400).json({ success: false, message: 'Cannot cancel an already completed paid transaction' });
+    }
+
+    transaction.status = 'cancelled';
+    transaction.paymentStatus = 'failed';
+    transaction.rejectionReason = 'PAYMENT_CANCELLED';
+    await transaction.save();
+
+    const branchId = transaction.branchId || 'dmart-kukatpally';
+
+    // Release all reserved items for this transaction / user
+    for (const item of transaction.items) {
+      const purchasedQty = Number(item.quantity) || 1;
+
+      const released = await Reservation.findOneAndUpdate(
+        {
+          userId: transaction.userId,
+          branchId,
+          productId: item.productId,
+          status: 'reserved'
+        },
+        {
+          status: 'released',
+          transactionId: transaction._id,
+          releasedAt: new Date()
+        }
+      );
+
+      if (released) {
+        await BranchInventory.updateOne(
+          { branchId, productId: item.productId },
+          { $inc: { reservedQuantity: -purchasedQty } }
+        );
+      }
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: 'Transaction cancelled and reservations released',
+      transaction
+    });
+  } catch (error) {
+    console.error('[TransactionController] Cancel transaction error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to cancel transaction',
+      error: error.message
+    });
+  }
+};
+
 
