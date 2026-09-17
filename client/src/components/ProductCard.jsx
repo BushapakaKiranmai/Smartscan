@@ -1,26 +1,31 @@
 import React from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { formatPaise } from '../context/CartContext';
 import Icons from './Icons';
 
 export const ProductCard = ({ product, branchInventory = null }) => {
   const navigate = useNavigate();
 
+  const productUrl = `/products/${product.slug || product.barcode || product._id || product.id}`;
+
   const primaryImage =
     product.images?.find((img) => img.isPrimary)?.url ||
     product.images?.[0]?.url ||
+    product.imageUrl ||
     'https://images.unsplash.com/photo-1542838132-92c53300491e?w=400&fit=crop';
 
   // Determine pricing & stock
-  const mrpPaise = branchInventory?.mrpPaise || product.defaultPricePaise;
+  const mrpPaise = branchInventory?.mrpPaise || product.defaultPricePaise || product.mrpPaise;
   const sellingPricePaise =
     branchInventory?.specialOfferPricePaise ||
     branchInventory?.sellingPricePaise ||
-    product.defaultPricePaise;
+    product.defaultPricePaise ||
+    product.sellingPricePaise ||
+    product.unitPricePaise;
 
   const savingsPaise = Math.max(0, mrpPaise - sellingPricePaise);
   const isDiscounted = savingsPaise > 0;
-  const stockQuantity = branchInventory?.stockQuantity ?? 50;
+  const stockQuantity = branchInventory?.stockQuantity ?? product.stockQuantity ?? 50;
   const isOutOfStock = stockQuantity <= 0;
 
   return (
@@ -52,13 +57,15 @@ export const ProductCard = ({ product, branchInventory = null }) => {
       )}
 
       {/* Product Image Container */}
-      <div
+      <Link
+        to={productUrl}
         style={{
           width: '100%',
           aspectRatio: '1/1',
           backgroundColor: 'var(--bg-surface-muted)',
           overflow: 'hidden',
-          position: 'relative'
+          position: 'relative',
+          display: 'block'
         }}
       >
         <img
@@ -72,7 +79,7 @@ export const ProductCard = ({ product, branchInventory = null }) => {
           }}
           loading="lazy"
         />
-      </div>
+      </Link>
 
       {/* Product Details */}
       <div
@@ -109,7 +116,9 @@ export const ProductCard = ({ product, branchInventory = null }) => {
             }}
             title={product.name}
           >
-            {product.name}
+            <Link to={productUrl} style={{ color: 'inherit', textDecoration: 'none' }}>
+              {product.name}
+            </Link>
           </h3>
 
           <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>

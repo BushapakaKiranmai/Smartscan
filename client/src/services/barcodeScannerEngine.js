@@ -29,7 +29,6 @@ console.log('⚡ HYBRID QUAGGA2 + ZXING 1D RETAIL SCANNER ENGINE INITIALIZED ⚡
 
 class BarcodeScannerEngine {
   constructor(options = {}) {
-    this.selectedDeviceId = options.selectedDeviceId || null;
     this.onBarcodeDetected = typeof options.onBarcodeDetected === 'function' ? options.onBarcodeDetected : () => {};
     this.onVideoStats = typeof options.onVideoStats === 'function' ? options.onVideoStats : () => {};
     this.onError = typeof options.onError === 'function' ? options.onError : () => {};
@@ -91,43 +90,18 @@ class BarcodeScannerEngine {
   }
 
   // ============================================================
-  // CAMERA DISCOVERY
+  // CAMERA DISCOVERY (INTERNAL SAFE FALLBACK)
   // ============================================================
 
   static async getAvailableCameras() {
-    try {
-      if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) {
-        console.warn('[SCANNER] enumerateDevices not supported by browser');
-        return [];
-      }
-
-      const devices = await navigator.mediaDevices.enumerateDevices();
-      const cameras = devices
-        .filter((device) => device.kind === 'videoinput')
-        .map((device, index) => ({
-          deviceId: device.deviceId,
-          groupId: device.groupId,
-          label: device.label || `Camera ${index + 1}`,
-          kind: device.kind
-        }));
-
-      console.log(
-        '[SCANNER] Available cameras:',
-        cameras.map((c) => ({ id: c.deviceId, label: c.label }))
-      );
-
-      return cameras;
-    } catch (error) {
-      console.error('[SCANNER] Could not enumerate cameras:', error);
-      return [];
-    }
+    return [];
   }
 
   // ============================================================
   // START ENGINE
   // ============================================================
 
-  async start(videoElement, selectedCameraId = null) {
+  async start(videoElement) {
     if (!videoElement) {
       const error = new Error('Scanner video element is missing.');
       this.handleError(error);
@@ -142,12 +116,10 @@ class BarcodeScannerEngine {
     this.starting = true;
     this.stopping = false;
     this.videoElement = videoElement;
-    this.selectedDeviceId = selectedCameraId || this.selectedDeviceId || null;
 
     console.log('[SCANNER] ========================================');
-    console.log('[SCANNER] Starting Supermarket Retail Scanner...');
-    console.log('[SCANNER] Selected camera ID:', this.selectedDeviceId || 'Auto (Environment)');
-    console.log('[SCANNER] Formats: EAN-13 (13 digits), UPC-A (12 digits)');
+    console.log('[SCANNER] Starting Supermarket Retail Scanner (Rear Camera)...');
+    console.log('[SCANNER] Formats: EAN-13 (13 digits), UPC-A (12 digits), EAN-8, UPC-E, CODE-128');
     console.log('[SCANNER] ========================================');
 
     this.onStatusChange('CAMERA_STARTING');
@@ -159,7 +131,6 @@ class BarcodeScannerEngine {
       }
 
       this.videoElement = videoElement;
-      this.selectedDeviceId = selectedCameraId || this.selectedDeviceId || null;
       this.stopping = false;
       this.locked = false;
 
@@ -168,22 +139,18 @@ class BarcodeScannerEngine {
 
       if (this.stopping) return;
 
-      // 3. Build optimized camera constraints
-      const constraints = this.buildCameraConstraints();
-      console.log('[SCANNER] Camera constraints:', constraints);
-
-      // 4. Configure Quagga2 for retail supermarket barcodes
-      const config = {
+      // 3. Configure Quagga2 for retail supermarket barcodes
+      const createConfig = (videoConstraints) => ({
         inputStream: {
           name: 'SmartScanLiveCamera',
           type: 'LiveStream',
           target: this.hostElement,
-          constraints,
+          constraints: videoConstraints,
           area: {
-            top: '15%',
-            right: '5%',
-            left: '5%',
-            bottom: '15%'
+            top: '10%',
+            right: '0%',
+            left: '0%',
+            bottom: '10%'
           }
         },
         locator: {
@@ -196,11 +163,34 @@ class BarcodeScannerEngine {
         },
         locate: true,
         numOfWorkers: 0,
-        frequency: 15
-      };
+        frequency: 25
+      });
 
-      // 5. Initialize Quagga
-      await this.initializeQuagga(config);
+      // 4. Initialize Quagga with rear camera constraints (with safe fallbacks)
+      try {
+        const primaryConstraints = this.buildCameraConstraints(false);
+        console.log('[SCANNER] Camera constraints:', primaryConstraints);
+        await this.initializeQuagga(createConfig(primaryConstraints));
+      } catch (err) {
+        if (this.stopping) return;
+        console.warn('[SCANNER] Primary rear camera constraints failed, attempting fallback facingMode:', err);
+        try {
+          const fallbackConstraints = {
+            width: { ideal: 1280, min: 640 },
+            height: { ideal: 720, min: 480 },
+            facingMode: 'environment'
+          };
+          await this.initializeQuagga(createConfig(fallbackConstraints));
+        } catch (secondErr) {
+          if (this.stopping) return;
+          console.warn('[SCANNER] Fallback environment failed, attempting generic video constraints:', secondErr);
+          const basicConstraints = {
+            width: { ideal: 1280, min: 640 },
+            height: { ideal: 720, min: 480 }
+          };
+          await this.initializeQuagga(createConfig(basicConstraints));
+        }
+      }
 
       if (this.stopping) return;
 
@@ -286,12 +276,12 @@ class BarcodeScannerEngine {
       }
 
       if (this.zxingRunning && !this.stopping) {
-        // Run frame sampling at ~18 frames per second
-        this.zxingTimer = setTimeout(sample, 55);
+        // High-speed frame sampling (~35 FPS)
+        this.zxingTimer = setTimeout(sample, 28);
       }
     };
 
-    this.zxingTimer = setTimeout(sample, 120);
+    this.zxingTimer = setTimeout(sample, 40);
   }
 
   stopZXingLoop() {
@@ -403,20 +393,13 @@ class BarcodeScannerEngine {
   // CAMERA CONSTRAINTS
   // ============================================================
 
-  buildCameraConstraints() {
-    const constraints = {
+  buildCameraConstraints(exact = false) {
+    return {
       width: { ideal: 1280, min: 640 },
       height: { ideal: 720, min: 480 },
       frameRate: { ideal: 30, min: 15 },
-      facingMode: { ideal: 'environment' }
+      facingMode: exact ? { exact: 'environment' } : { ideal: 'environment' }
     };
-
-    if (this.selectedDeviceId) {
-      constraints.deviceId = { ideal: this.selectedDeviceId };
-      delete constraints.facingMode;
-    }
-
-    return constraints;
   }
 
   // ============================================================
@@ -671,32 +654,15 @@ class BarcodeScannerEngine {
     console.log(`[SCANNER] Candidate detected: ${code}`);
     console.log('[SCANNER] Checksum VALID');
 
-    // 5. Multi-frame candidate confirmation (eliminates single-frame optical/glare glitches)
-    if (!isSingleShot) {
-      if (this.pendingCandidate === code && (now - (this.pendingCandidateTime || 0)) < 700) {
-        this.candidateHits = (this.candidateHits || 1) + 1;
-      } else {
-        this.pendingCandidate = code;
-        this.pendingCandidateTime = now;
-        this.candidateHits = 1;
-        // Require 2 matching frames to confirm
-        return;
-      }
-
-      if (this.candidateHits < 2) {
-        return;
-      }
-    }
-
-    // Reset pending candidate on confirmation
-    this.pendingCandidate = null;
-    this.candidateHits = 0;
+    // 5. Instantly confirm validated retail barcode for lowest practical supermarket latency
     this.lastDetectedCode = code;
     this.lastDetectedAt = now;
+    this.pendingCandidate = null;
+    this.candidateHits = 0;
 
     // 6. Log confirmation sequence
     console.log('[SCANNER] Barcode CONFIRMED');
-    console.log('[SCANNER] 🎯 BARCODE DETECTED');
+    console.log(`[SCANNER] 🎯 BARCODE DETECTED: ${code} (${format})`);
 
     // 7. Lock temporarily to prevent frame flooding
     this.locked = true;
@@ -711,7 +677,7 @@ class BarcodeScannerEngine {
       if (!this.stopping) {
         this.locked = false;
       }
-    }, 550);
+    }, 450);
   }
 
   normalizeDetectedCode(code) {

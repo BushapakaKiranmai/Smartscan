@@ -25,6 +25,9 @@ import GateTerminalPage from './pages/GateTerminalPage';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
 import CatalogPage from './pages/CatalogPage';
+import ProductDetailPage from './pages/ProductDetailPage';
+import WishlistPage from './pages/WishlistPage';
+import NotFoundPage from './pages/NotFoundPage';
 
 export const App = () => {
   return (
@@ -41,30 +44,39 @@ export const App = () => {
                   <main style={{ flex: 1 }}>
                     <ErrorBoundary>
                       <Routes>
-                        {/* Scan-Focused Customer Home */}
+                        {/* 1. Clean Home routes */}
                         <Route path="/" element={<HomePage />} />
+                        <Route path="/home" element={<HomePage />} />
+
+                        {/* 2. Store Selection & Scan & Go */}
                         <Route path="/stores" element={<StoreSelectPage />} />
-                        <Route path="/profile" element={<ProfilePage />} />
                         <Route path="/scan" element={<ScannerPage />} />
-                        {/* Branch-Aware Customer Catalog & Product Search */}
+
+                        {/* 3. Products, Categories & Details */}
+                        <Route path="/products" element={<CatalogPage />} />
+                        <Route path="/products/:productId" element={<ProductDetailPage />} />
                         <Route path="/catalog" element={<CatalogPage />} />
                         <Route path="/search" element={<CatalogPage />} />
-                        <Route path="/cart" element={<CartPage />} />
+                        <Route path="/men" element={<CatalogPage category="Men" />} />
+                        <Route path="/women" element={<CatalogPage category="Women" />} />
 
-                        {/* Customer Protected Routes */}
+                        {/* 4. Customer Cart & Wishlist */}
                         <Route
-                          path="/checkout"
+                          path="/cart"
                           element={
                             <ProtectedRoute>
-                              <CheckoutPage />
+                              <CartPage />
                             </ProtectedRoute>
                           }
                         />
+                        <Route path="/wishlist" element={<WishlistPage />} />
+
+                        {/* 5. Protected Customer Account & History */}
                         <Route
-                          path="/order-success/:orderId"
+                          path="/profile"
                           element={
                             <ProtectedRoute>
-                              <OrderSuccessPage />
+                              <ProfilePage />
                             </ProtectedRoute>
                           }
                         />
@@ -77,7 +89,59 @@ export const App = () => {
                           }
                         />
 
-                        {/* Admin / Manager Product Database Management */}
+                        {/* 6. Payment & Checkout (both clean /payment and /checkout alias) */}
+                        <Route
+                          path="/payment"
+                          element={
+                            <ProtectedRoute>
+                              <CheckoutPage />
+                            </ProtectedRoute>
+                          }
+                        />
+                        <Route
+                          path="/checkout"
+                          element={
+                            <ProtectedRoute>
+                              <CheckoutPage />
+                            </ProtectedRoute>
+                          }
+                        />
+
+                        {/* 7. Exit Pass & Order Success */}
+                        <Route
+                          path="/exit-pass"
+                          element={
+                            <ProtectedRoute>
+                              <OrderSuccessPage />
+                            </ProtectedRoute>
+                          }
+                        />
+                        <Route
+                          path="/exit-pass/:orderId"
+                          element={
+                            <ProtectedRoute>
+                              <OrderSuccessPage />
+                            </ProtectedRoute>
+                          }
+                        />
+                        <Route
+                          path="/order-success/:orderId"
+                          element={
+                            <ProtectedRoute>
+                              <OrderSuccessPage />
+                            </ProtectedRoute>
+                          }
+                        />
+
+                        {/* 8. Admin / Manager Product Database */}
+                        <Route
+                          path="/admin"
+                          element={
+                            <ProtectedRoute allowedRoles={['BRANCH_MANAGER', 'SUPER_ADMIN']}>
+                              <AdminProductsPage />
+                            </ProtectedRoute>
+                          }
+                        />
                         <Route
                           path="/admin/products"
                           element={
@@ -87,7 +151,7 @@ export const App = () => {
                           }
                         />
 
-                        {/* Staff / Manager Security Gate Terminal */}
+                        {/* 9. Staff Security Gate Terminal */}
                         <Route
                           path="/terminal"
                           element={
@@ -97,12 +161,12 @@ export const App = () => {
                           }
                         />
 
-                        {/* Authentication */}
+                        {/* 10. Authentication */}
                         <Route path="/login" element={<LoginPage />} />
                         <Route path="/register" element={<RegisterPage />} />
 
-                        {/* Fallback */}
-                        <Route path="*" element={<Navigate to="/" replace />} />
+                        {/* 11. Application-level custom 404 for genuinely unknown routes */}
+                        <Route path="*" element={<NotFoundPage />} />
                       </Routes>
                     </ErrorBoundary>
                   </main>
@@ -119,4 +183,3 @@ export const App = () => {
 };
 
 export default App;
-

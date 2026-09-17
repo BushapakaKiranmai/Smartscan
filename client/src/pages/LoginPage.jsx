@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Link, useNavigate, useLocation } from 'react-router-dom';
+import { Link, useNavigate, useLocation, Navigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import Icons from '../components/Icons';
@@ -9,12 +9,18 @@ export const LoginPage = () => {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const { login } = useAuth();
+  const { login, isAuthenticated } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const toast = useToast();
 
-  const from = location.state?.from?.pathname || '/';
+  const from = location.state?.from?.pathname || '/home';
+
+  // If already logged in, redirect away from login without polluting history
+  if (isAuthenticated) {
+    const target = from !== '/login' && from !== '/' ? from : '/home';
+    return <Navigate to={target} replace />;
+  }
 
   const handleSubmit = async (e) => {
     if (e) e.preventDefault();
@@ -29,9 +35,11 @@ export const LoginPage = () => {
       toast.success(`Welcome back, ${user.name}!`);
 
       if (user.role === 'BRANCH_STAFF' || user.role === 'BRANCH_MANAGER') {
-        navigate('/terminal');
+        const staffDest = from !== '/' && from !== '/login' ? from : '/terminal';
+        navigate(staffDest, { replace: true });
       } else {
-        navigate(from, { replace: true });
+        const dest = (from && from !== '/' && from !== '/login' && from !== '/register') ? from : '/home';
+        navigate(dest, { replace: true });
       }
     } catch (err) {
       toast.error(err.message || 'Login failed. Check your credentials.');

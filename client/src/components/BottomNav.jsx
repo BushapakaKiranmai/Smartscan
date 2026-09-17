@@ -1,18 +1,20 @@
 import React from 'react';
-import { NavLink } from 'react-router-dom';
+import { NavLink, useLocation } from 'react-router-dom';
 import { useCart } from '../context/CartContext';
 import Icons from './Icons';
 
 export const BottomNav = () => {
   const { itemCount } = useCart();
+  const location = useLocation();
+
+  const isHomeActive = location.pathname === '/' || location.pathname === '/home';
 
   return (
     <nav className="bottom-dock">
       {/* 1. Home */}
       <NavLink
-        to="/"
-        end
-        className={({ isActive }) => `dock-item ${isActive ? 'active' : ''}`}
+        to="/home"
+        className={`dock-item ${isHomeActive ? 'active' : ''}`}
       >
         <Icons.Home size={22} />
         <span>Home</span>

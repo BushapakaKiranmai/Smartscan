@@ -22,7 +22,7 @@ export const ProfilePage = () => {
   const handleLogout = () => {
     logout();
     toast.info('Signed out successfully');
-    navigate('/login');
+    navigate('/login', { replace: true });
   };
 
   const openEditModal = () => {

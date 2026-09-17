@@ -1,31 +1,24 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import api from '../api/client';
 import { useStore } from '../context/StoreContext';
 import { useToast } from '../context/ToastContext';
 import Icons from '../components/Icons';
 
 /**
- * Product Search Page — Availability Check Only
+ * Product Search & Catalog Page — Availability Check Only
  *
  * Search Page Purpose:
  * SEARCH → CHECK AVAILABILITY → SEE PRODUCT DETAILS → SCAN PRODUCT
- *
- * It is NOT:
- * SEARCH → ADD TO CART
- *
- * The search page is completely read-only.
- * Clicking [ 📷 Scan Product ] navigates to the live camera scanner.
- * Adding items to the cart can ONLY be done via real barcode scanning in ScannerPage.
  */
-export const CatalogPage = () => {
+export const CatalogPage = ({ category = null }) => {
   const { selectedBranch, selectBranch, branches } = useStore();
   const toast = useToast();
   const navigate = useNavigate();
 
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState('');
+  const [search, setSearch] = useState(category || '');
   const [isBranchModalOpen, setIsBranchModalOpen] = useState(false);
 
   // Available branches fallback list
@@ -35,6 +28,13 @@ export const CatalogPage = () => {
     { _id: 'dmart-madhapur', id: 'dmart-madhapur', name: 'D Mart Madhapur', branchCode: 'DMART-MAD-03' }
   ];
 
+  // Sync category change to search
+  useEffect(() => {
+    if (category) {
+      setSearch(category);
+    }
+  }, [category]);
+
   // Fetch product availability for the selected branch (Read-Only query)
   useEffect(() => {
     let isCancelled = false;
@@ -43,9 +43,10 @@ export const CatalogPage = () => {
       try {
         setLoading(true);
         const activeBranchId = selectedBranch?._id || 'dmart-kukatpally';
+        const queryTerm = search.trim() || category || undefined;
         const res = await api.get('/products/search', {
           params: {
-            q: search.trim() || undefined,
+            q: queryTerm,
             branchId: activeBranchId
           }
         });
@@ -84,10 +85,12 @@ export const CatalogPage = () => {
           </span>
         </div>
         <h1 className="title-section" style={{ marginBottom: '4px' }}>
-          Product Search & Availability
+          {category ? `${category}'s Collection & Grocery` : 'Product Search & Availability'}
         </h1>
         <p className="subtitle">
-          Check live product availability at your selected branch. This search page is read-only. Use Scan & Go to scan and add items.
+          {category
+            ? `Explore ${category.toLowerCase()}'s items and essentials at your selected branch.`
+            : 'Check live product availability at your selected branch. This search page is read-only. Use Scan & Go to scan and add items.'}
         </p>
       </div>
 
@@ -246,7 +249,12 @@ export const CatalogPage = () => {
                       lineHeight: 1.3
                     }}
                   >
-                    {product.name}
+                    <Link
+                      to={`/products/${product.slug || product.barcode || product._id || product.id}`}
+                      style={{ color: 'inherit', textDecoration: 'none' }}
+                    >
+                      {product.name}
+                    </Link>
                   </h3>
 
                   {/* Barcode */}

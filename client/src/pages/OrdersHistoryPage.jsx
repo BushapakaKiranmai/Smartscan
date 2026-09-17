@@ -145,7 +145,7 @@ export const OrdersHistoryPage = () => {
                 </div>
 
                 <Link
-                  to={`/order-success/${order._id}`}
+                  to={`/exit-pass/${order._id}`}
                   className="btn btn-secondary btn-sm"
                   style={{ borderRadius: '12px', padding: '6px 10px', fontSize: '0.78rem', fontWeight: 800 }}
                 >

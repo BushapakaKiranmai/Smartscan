@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, Navigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import Icons from '../components/Icons';
@@ -13,9 +13,14 @@ export const RegisterPage = () => {
   });
   const [loading, setLoading] = useState(false);
 
-  const { register } = useAuth();
+  const { register, isAuthenticated } = useAuth();
   const navigate = useNavigate();
   const toast = useToast();
+
+  // If already authenticated, redirect to /home without creating history entry
+  if (isAuthenticated) {
+    return <Navigate to="/home" replace />;
+  }
 
   const handleSubmit = async (e) => {
     if (e) e.preventDefault();
@@ -33,7 +38,7 @@ export const RegisterPage = () => {
       setLoading(true);
       const user = await register(formData);
       toast.success(`Account created! Welcome to SmartScan Pay, ${user.name}.`);
-      navigate('/');
+      navigate('/home', { replace: true });
     } catch (err) {
       toast.error(err.message || 'Registration failed. Please check your details.');
     } finally {

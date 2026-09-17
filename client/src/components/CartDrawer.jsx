@@ -36,7 +36,7 @@ export const CartDrawer = () => {
 
   const handleCheckout = () => {
     setIsDrawerOpen(false);
-    navigate('/checkout');
+    navigate('/payment');
   };
 
   return (

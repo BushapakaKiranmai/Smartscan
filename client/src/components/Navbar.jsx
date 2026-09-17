@@ -17,10 +17,10 @@ export const Navbar = () => {
   const handleLogout = () => {
     logout();
     setUserMenuOpen(false);
-    navigate('/login');
+    navigate('/login', { replace: true });
   };
 
-  const isActive = (path) => location.pathname === path;
+  const isActive = (path) => location.pathname === path || (path === '/home' && location.pathname === '/');
 
   return (
     <header
@@ -51,7 +51,7 @@ export const Navbar = () => {
       >
         {/* Brand with Logo & Subtitle */}
         <Link
-          to="/"
+          to="/home"
           style={{
             display: 'flex',
             alignItems: 'center',
@@ -124,18 +124,33 @@ export const Navbar = () => {
             </Link>
 
             <Link
-              to="/catalog"
+              to="/products"
               style={{
                 padding: '7px 12px',
                 borderRadius: 'var(--radius-md)',
                 fontSize: '0.85rem',
                 fontWeight: 600,
-                color: (isActive('/catalog') || isActive('/search')) ? 'var(--primary)' : 'var(--text-secondary)',
-                background: (isActive('/catalog') || isActive('/search')) ? 'var(--primary-light)' : 'transparent',
+                color: (isActive('/products') || isActive('/catalog') || isActive('/search')) ? 'var(--primary)' : 'var(--text-secondary)',
+                background: (isActive('/products') || isActive('/catalog') || isActive('/search')) ? 'var(--primary-light)' : 'transparent',
                 transition: 'all var(--transition-fast)'
               }}
             >
-              Check Availability
+              Products
+            </Link>
+
+            <Link
+              to="/wishlist"
+              style={{
+                padding: '7px 12px',
+                borderRadius: 'var(--radius-md)',
+                fontSize: '0.85rem',
+                fontWeight: 600,
+                color: isActive('/wishlist') ? 'var(--primary)' : 'var(--text-secondary)',
+                background: isActive('/wishlist') ? 'var(--primary-light)' : 'transparent',
+                transition: 'all var(--transition-fast)'
+              }}
+            >
+              Wishlist
             </Link>
 
             {isAuthenticated && (

@@ -7,9 +7,12 @@ import { formatPaise } from '../context/CartContext';
 import Icons from '../components/Icons';
 
 export const OrderSuccessPage = () => {
-  const { orderId } = useParams();
+  const { orderId: paramOrderId } = useParams();
   const location = useLocation();
 
+  const [orderId, setOrderId] = useState(
+    paramOrderId || localStorage.getItem('smartscan_latest_order_id') || null
+  );
   const [order, setOrder] = useState(null);
   const [exitToken, setExitToken] = useState(
     location.state?.verificationResult?.exitToken || null
@@ -19,6 +22,13 @@ export const OrderSuccessPage = () => {
   const [usedAt, setUsedAt] = useState(null);
   const [loading, setLoading] = useState(true);
 
+  // Sync param changes
+  useEffect(() => {
+    if (paramOrderId) {
+      setOrderId(paramOrderId);
+    }
+  }, [paramOrderId]);
+
   // 1. Initial Load: Fetch order & authoritative ExitPass status from backend
   useEffect(() => {
     let isMounted = true;
@@ -26,9 +36,30 @@ export const OrderSuccessPage = () => {
     const fetchOrderAndPass = async () => {
       try {
         setLoading(true);
+
+        let activeId = orderId;
+        if (!activeId) {
+          try {
+            const ordersRes = await api.get('/orders');
+            const ordersList = ordersRes?.orders || ordersRes?.data?.orders || ordersRes?.data || [];
+            if (Array.isArray(ordersList) && ordersList.length > 0) {
+              activeId = ordersList[0]._id || ordersList[0].id;
+              setOrderId(activeId);
+              localStorage.setItem('smartscan_latest_order_id', activeId);
+            }
+          } catch (listErr) {
+            console.warn('[ExitPass] Could not fetch user orders:', listErr);
+          }
+        }
+
+        if (!activeId) {
+          if (isMounted) setLoading(false);
+          return;
+        }
+
         const [orderRes, exitRes] = await Promise.all([
-          api.get(`/orders/${orderId}`).catch(() => null),
-          getExitPass(orderId).catch(() => null)
+          api.get(`/orders/${activeId}`).catch(() => null),
+          getExitPass(activeId).catch(() => null)
         ]);
 
         if (!isMounted) return;
@@ -178,7 +209,7 @@ export const OrderSuccessPage = () => {
             <Icons.Receipt size={18} />
             <span>View Receipt & Exit Pass</span>
           </Link>
-          <Link to="/" className="btn btn-secondary btn-block">
+          <Link to="/home" className="btn btn-secondary btn-block">
             <Icons.Home size={18} />
             <span>Back to Home</span>
           </Link>

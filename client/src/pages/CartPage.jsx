@@ -81,7 +81,7 @@ export const CartPage = () => {
               <Icons.Camera size={20} />
               <span>Start Barcode Scanning</span>
             </Link>
-            <Link to="/" className="btn btn-secondary" style={{ borderRadius: 'var(--radius-md)', fontWeight: 700 }}>
+            <Link to="/home" className="btn btn-secondary" style={{ borderRadius: 'var(--radius-md)', fontWeight: 700 }}>
               <Icons.Home size={18} />
               <span>Back to Home</span>
             </Link>
@@ -484,7 +484,7 @@ export const CartPage = () => {
 
             <button
               type="button"
-              onClick={() => navigate('/checkout')}
+              onClick={() => navigate('/payment')}
               className="btn btn-primary"
               style={{
                 padding: '12px 24px',

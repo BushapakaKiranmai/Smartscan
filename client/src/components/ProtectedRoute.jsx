@@ -1,5 +1,5 @@
 import React from 'react';
-import { Navigate, useLocation } from 'react-router-dom';
+import { Navigate, useLocation, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
 export const ProtectedRoute = ({ children, allowedRoles = null }) => {
@@ -37,7 +37,7 @@ export const ProtectedRoute = ({ children, allowedRoles = null }) => {
             <p style={{ color: '#94a3b8', marginBottom: '20px' }}>
               You do not have administrative permission to access this terminal.
             </p>
-            <a href="/" className="btn btn-primary">Return to Store</a>
+            <Link to="/home" className="btn btn-primary">Return to Store</Link>
           </div>
         </div>
       );

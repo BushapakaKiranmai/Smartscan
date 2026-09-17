@@ -26,9 +26,7 @@ export const BarcodeScanner = ({
   const [manualCode, setManualCode] = useState('');
   const [cameraActive, setCameraActive] = useState(false);
   const [cameraError, setCameraError] = useState(null);
-  const [cameraList, setCameraList] = useState([]);
-  const [selectedCameraId, setSelectedCameraId] = useState(null);
-  const [camerasEnumerated, setCamerasEnumerated] = useState(false);
+  const [retryCount, setRetryCount] = useState(0);
   const [torchSupported, setTorchSupported] = useState(false);
   const [torchOn, setTorchOn] = useState(false);
 
@@ -71,32 +69,7 @@ export const BarcodeScanner = ({
     }
   }, [isScanning]);
 
-  // Phase 1: Component Mounted & Camera Enumeration
-  useEffect(() => {
-    console.log('[SCANNER] component mounted');
-    let isMounted = true;
 
-    BarcodeScannerEngine.getAvailableCameras()
-      .then((cameras) => {
-        if (!isMounted) return;
-        if (cameras && cameras.length > 0) {
-          setCameraList(cameras);
-          const rearCam = cameras.find((c) => /back|rear|environment/i.test(c.label));
-          const preferredId = rearCam ? rearCam.deviceId : cameras[0].deviceId;
-          setSelectedCameraId((prev) => prev || preferredId);
-        }
-        setCamerasEnumerated(true);
-      })
-      .catch((err) => {
-        if (!isMounted) return;
-        console.warn('[SCANNER] Could not enumerate cameras on mount:', err);
-        setCamerasEnumerated(true);
-      });
-
-    return () => {
-      isMounted = false;
-    };
-  }, []);
 
   // Stable detection callback
   const handleDetectedCode = useCallback((code, formatName, result) => {
@@ -115,11 +88,8 @@ export const BarcodeScanner = ({
     handleDetectedCodeRef.current = handleDetectedCode;
   }, [handleDetectedCode]);
 
-  // Phase 2: Scanner Lifecycle (only depends on genuine camera setup requirements)
+  // Scanner Lifecycle (Automatically connects directly to the phone rear camera)
   useEffect(() => {
-    if (!camerasEnumerated) {
-      return;
-    }
 
     console.log('[SCANNER] EFFECT START');
 
@@ -158,7 +128,6 @@ export const BarcodeScanner = ({
       console.log('[SCANNER] ENGINE CREATED');
 
       engine = new BarcodeScannerEngine({
-        selectedDeviceId: selectedCameraId,
         onBarcodeDetected: (code, formatName, result) => {
           if (!cancelled && generationRef.current === currentGen) {
             if (handleDetectedCodeRef.current) {
@@ -181,7 +150,7 @@ export const BarcodeScanner = ({
             if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
               setCameraError('Camera access required. Please allow camera permissions to scan supermarket products.');
             } else {
-              setCameraError('Camera unavailable or blocked by system. Please check permissions or switch cameras.');
+              setCameraError('Unable to access the rear camera. Please allow camera permission and try again.');
             }
           }
         },
@@ -205,7 +174,7 @@ export const BarcodeScanner = ({
       console.log('[SCANNER] ENGINE START REQUESTED');
 
       try {
-        await engine.start(videoRef.current, selectedCameraId);
+        await engine.start(videoRef.current);
 
         if (cancelled) {
           console.log('[SCANNER] Engine start completed after cancellation; stopping engine...');
@@ -254,7 +223,7 @@ export const BarcodeScanner = ({
         });
       }
     };
-  }, [camerasEnumerated, scannerMode, selectedCameraId]);
+  }, [scannerMode, retryCount]);
 
   // Torch Toggle
   const handleToggleTorch = async () => {
@@ -572,7 +541,7 @@ export const BarcodeScanner = ({
                         type="button"
                         onClick={() => {
                           setCameraError(null);
-                          setSelectedCameraId(null);
+                          setRetryCount((r) => r + 1);
                         }}
                         className="btn btn-primary btn-sm"
                         style={{ borderRadius: 'var(--radius-md)' }}
@@ -601,33 +570,7 @@ export const BarcodeScanner = ({
             )}
           </div>
 
-          {/* Camera Selector (When Multiple Cameras Detected) */}
-          {cameraList.length > 1 && (
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', marginTop: '8px' }}>
-              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Camera:</span>
-              <select
-                value={selectedCameraId || ''}
-                onChange={(e) => {
-                  unmountReasonRef.current = 'CLEANUP REASON: CAMERA_CHANGE';
-                  setSelectedCameraId(e.target.value);
-                }}
-                style={{
-                  padding: '4px 10px',
-                  borderRadius: '12px',
-                  fontSize: '0.78rem',
-                  background: 'var(--bg-surface)',
-                  border: '1px solid var(--border-card)',
-                  color: 'var(--text-primary)'
-                }}
-              >
-                {cameraList.map((cam, idx) => (
-                  <option key={cam.deviceId || idx} value={cam.deviceId}>
-                    {cam.label || `Camera ${idx + 1}`}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
+
 
           {/* Position & Focus Guide */}
           <div style={{ textAlign: 'center', marginTop: '8px' }}>

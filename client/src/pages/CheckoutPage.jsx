@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api/client';
 import { useStore } from '../context/StoreContext';
@@ -19,13 +19,18 @@ export const CheckoutPage = () => {
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [timeLeftSeconds, setTimeLeftSeconds] = useState(900); // 15 mins default
 
-  // Step 1: Initiate Checkout on Mount with frontend cart items
+  const checkoutInitiatedRef = useRef(false);
+
+  // Step 1: Initiate Checkout on Mount with frontend cart items (Single run guard)
   useEffect(() => {
+    if (checkoutInitiatedRef.current) return;
+    checkoutInitiatedRef.current = true;
+
     const initiateCheckout = async () => {
       const items = cart?.items || [];
       if (items.length === 0) {
         toast.warning('Your tray is empty.');
-        navigate('/cart');
+        navigate('/cart', { replace: true });
         return;
       }
 
@@ -86,14 +91,14 @@ export const CheckoutPage = () => {
         }
       } catch (err) {
         toast.error(err.message || 'Checkout failed. Check your tray items.');
-        navigate('/cart');
+        navigate('/cart', { replace: true });
       } finally {
         setLoading(false);
       }
     };
 
     initiateCheckout();
-  }, [cart, navigate, toast]);
+  }, [navigate, toast]);
 
   // Reservation Countdown Timer
   useEffect(() => {
@@ -125,7 +130,12 @@ export const CheckoutPage = () => {
   const handlePaymentSuccess = (verificationResult) => {
     setShowPaymentModal(false);
     clearCart(); // Frontend cart cleared after purchase
-    navigate(`/order-success/${order._id || order.id}`, {
+    const targetOrderId = order._id || order.id;
+    try {
+      localStorage.setItem('smartscan_latest_order_id', targetOrderId);
+    } catch {}
+    navigate(`/exit-pass/${targetOrderId}`, {
+      replace: true,
       state: { verificationResult }
     });
   };
