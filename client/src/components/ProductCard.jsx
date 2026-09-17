@@ -6,7 +6,7 @@ import Icons from './Icons';
 export const ProductCard = ({ product, branchInventory = null }) => {
   const navigate = useNavigate();
 
-  const productUrl = `/products/${product.slug || product.barcode || product._id || product.id}`;
+  const productUrl = `/products/${product.slug || product._id || product.id}`;
 
   const primaryImage =
     product.images?.find((img) => img.isPrimary)?.url ||

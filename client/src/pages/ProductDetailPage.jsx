@@ -230,25 +230,6 @@ export const ProductDetailPage = () => {
               </span>
             )}
           </div>
-
-          {/* Barcode display */}
-          <div
-            style={{
-              marginTop: '14px',
-              padding: '10px 14px',
-              borderRadius: '12px',
-              background: 'var(--bg-surface-muted)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              fontSize: '0.82rem'
-            }}
-          >
-            <span style={{ color: 'var(--text-muted)', fontWeight: 600 }}>EAN / Barcode:</span>
-            <code style={{ fontWeight: 800, color: 'var(--text-primary)', fontFamily: 'monospace' }}>
-              {product.barcode || 'N/A'}
-            </code>
-          </div>
         </div>
 
         {/* Right: Product Details & Purchase Actions */}

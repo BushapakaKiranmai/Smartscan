@@ -154,7 +154,7 @@ export const CatalogPage = ({ category = null }) => {
         <input
           type="text"
           className="form-input"
-          placeholder="🔍 Search: Marie Gold, product name, brand, barcode..."
+          placeholder="🔍 Search: Marie Gold, product name, brand..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           style={{
@@ -239,36 +239,50 @@ export const CatalogPage = ({ category = null }) => {
                 }}
               >
                 <div>
+                  {/* Product Image if available */}
+                  {(product.image || product.imageUrl) && (
+                    <div
+                      style={{
+                        width: '100%',
+                        height: '140px',
+                        borderRadius: '12px',
+                        overflow: 'hidden',
+                        marginBottom: '12px',
+                        background: 'var(--bg-surface-muted)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center'
+                      }}
+                    >
+                      <img
+                        src={product.image || product.imageUrl}
+                        alt={product.name}
+                        style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                        loading="lazy"
+                        onError={(e) => {
+                          e.currentTarget.parentElement.style.display = 'none';
+                        }}
+                      />
+                    </div>
+                  )}
+
                   {/* Product Title */}
                   <h3
                     style={{
                       fontSize: '1.08rem',
                       fontWeight: 800,
                       color: 'var(--text-primary)',
-                      margin: '0 0 4px 0',
+                      margin: '0 0 8px 0',
                       lineHeight: 1.3
                     }}
                   >
                     <Link
-                      to={`/products/${product.slug || product.barcode || product._id || product.id}`}
+                      to={`/products/${product.slug || product._id || product.id}`}
                       style={{ color: 'inherit', textDecoration: 'none' }}
                     >
                       {product.name}
                     </Link>
                   </h3>
-
-                  {/* Barcode */}
-                  <div
-                    style={{
-                      fontSize: '0.82rem',
-                      color: 'var(--text-muted)',
-                      fontFamily: 'monospace',
-                      fontWeight: 600,
-                      marginBottom: '10px'
-                    }}
-                  >
-                    Barcode: {product.barcode}
-                  </div>
 
                   {/* Price */}
                   <div
