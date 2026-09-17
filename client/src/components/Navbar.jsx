@@ -138,21 +138,6 @@ export const Navbar = () => {
               Products
             </Link>
 
-            <Link
-              to="/wishlist"
-              style={{
-                padding: '7px 12px',
-                borderRadius: 'var(--radius-md)',
-                fontSize: '0.85rem',
-                fontWeight: 600,
-                color: isActive('/wishlist') ? 'var(--primary)' : 'var(--text-secondary)',
-                background: isActive('/wishlist') ? 'var(--primary-light)' : 'transparent',
-                transition: 'all var(--transition-fast)'
-              }}
-            >
-              Wishlist
-            </Link>
-
             {isAuthenticated && (
               <Link
                 to="/orders"

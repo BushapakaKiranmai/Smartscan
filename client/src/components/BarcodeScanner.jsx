@@ -147,7 +147,14 @@ export const BarcodeScanner = ({
           if (!cancelled && generationRef.current === currentGen) {
             console.warn('[SCANNER] Engine error:', err);
             setCameraActive(false);
-            if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+            const errName = err?.name || '';
+            const errMsg = String(err?.message || err || '');
+            if (
+              errName === 'NotAllowedError' ||
+              errName === 'PermissionDeniedError' ||
+              errMsg.toLowerCase().includes('permission') ||
+              errMsg.toLowerCase().includes('notallowed')
+            ) {
               setCameraError('Camera access required. Please allow camera permissions to scan supermarket products.');
             } else {
               setCameraError('Unable to access the rear camera. Please allow camera permission and try again.');

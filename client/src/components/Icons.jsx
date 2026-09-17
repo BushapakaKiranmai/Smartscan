@@ -1,7 +1,7 @@
 import React from 'react';
 
 // Crisp, standardized vector SVG icon collection for SmartScan & Pay
-export const Icons = {
+const rawIcons = {
   // Brand & Retail
   Store: ({ size = 20, className = '', ...props }) => (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} {...props}>
@@ -310,7 +310,60 @@ export const Icons = {
       <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
       <path d="m15 5 4 4" />
     </svg>
+  ),
+
+  Heart: ({ size = 20, className = '', ...props }) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} {...props}>
+      <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z" />
+    </svg>
+  ),
+
+  Navigation: ({ size = 20, className = '', ...props }) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} {...props}>
+      <polygon points="3 11 22 2 13 21 11 13 3 11" />
+    </svg>
+  ),
+
+  Check: ({ size = 20, className = '', ...props }) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} {...props}>
+      <polyline points="20 6 9 17 4 12" />
+    </svg>
+  ),
+
+  AlertCircle: ({ size = 20, className = '', ...props }) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} {...props}>
+      <circle cx="12" cy="12" r="10" />
+      <line x1="12" y1="8" x2="12" y2="12" />
+      <line x1="12" y1="16" x2="12.01" y2="16" />
+    </svg>
+  ),
+
+  ShieldAlert: ({ size = 20, className = '', ...props }) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} {...props}>
+      <path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z" />
+      <line x1="12" y1="8" x2="12" y2="12" />
+      <line x1="12" y1="16" x2="12.01" y2="16" />
+    </svg>
   )
 };
+
+// Safe fallback component preventing any React #130 error if an unlisted icon name is queried
+const SafeFallbackIcon = ({ size = 20, className = '', ...props }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} {...props}>
+    <circle cx="12" cy="12" r="9" />
+  </svg>
+);
+
+export const Icons = new Proxy(rawIcons, {
+  get(target, prop) {
+    if (typeof prop === 'string' && prop in target) {
+      return target[prop];
+    }
+    if (typeof prop === 'string' && prop !== 'then' && prop !== '$$typeof' && !prop.startsWith('_')) {
+      return SafeFallbackIcon;
+    }
+    return target[prop];
+  }
+});
 
 export default Icons;
