@@ -287,8 +287,9 @@ export const ScannerPage = () => {
           setScanErrorMsg(message);
           setScanState('ERROR');
           toast.warning(message);
-        } else if (errorCode === 'PRODUCT_SOLD_OUT' || statusCode === 409) {
-          const message = 'Product not found or sold out.';
+        } else if (errorCode === 'PRODUCT_SOLD_OUT' || errorCode === 'PRODUCT_OUT_OF_STOCK' || statusCode === 409) {
+          const serverMsg = err?.response?.data?.message;
+          const message = serverMsg || 'Sorry, this product is currently out of stock at this branch.';
           setScanErrorMsg(message);
           setScanState('ERROR');
           toast.error(message);

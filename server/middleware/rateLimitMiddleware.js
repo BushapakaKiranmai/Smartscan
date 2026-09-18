@@ -1,10 +1,12 @@
 const rateLimit = require('express-rate-limit');
 const { errorResponse } = require('../utils/apiResponse');
 
+const isTest = process.env.NODE_ENV === 'test';
+
 /**
  * Standard API rate limiter (100 requests per 15 minutes by default)
  */
-const generalLimiter = rateLimit({
+const generalLimiter = isTest ? (req, res, next) => next() : rateLimit({
   windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS, 10) || 15 * 60 * 1000,
   max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS, 10) || 100,
   standardHeaders: true,
@@ -17,7 +19,7 @@ const generalLimiter = rateLimit({
 /**
  * Strict authentication limiter (max 10 login attempts per 15 minutes)
  */
-const authLimiter = rateLimit({
+const authLimiter = isTest ? (req, res, next) => next() : rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 10,
   standardHeaders: true,
@@ -30,7 +32,7 @@ const authLimiter = rateLimit({
 /**
  * Exit code manual entry limiter (max 5 requests per minute per IP / terminal)
  */
-const exitCodeLimiter = rateLimit({
+const exitCodeLimiter = isTest ? (req, res, next) => next() : rateLimit({
   windowMs: 60 * 1000,
   max: 5,
   standardHeaders: true,

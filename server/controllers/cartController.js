@@ -191,8 +191,9 @@ exports.addToCart = async (req, res) => {
     if (!inventory || !inventory.available || inventory.stockQuantity <= 0) {
       return res.status(409).json({
         success: false,
-        code: 'PRODUCT_SOLD_OUT',
-        message: 'Product not found or sold out.'
+        code: 'PRODUCT_OUT_OF_STOCK',
+        legacyCode: 'PRODUCT_SOLD_OUT',
+        message: 'Sorry, this product is currently out of stock at this branch.'
       });
     }
 
@@ -256,8 +257,9 @@ exports.addToCart = async (req, res) => {
       // Stock exhausted or all physical units reserved by other concurrent users!
       return res.status(409).json({
         success: false,
-        code: 'PRODUCT_SOLD_OUT',
-        message: 'Product not found or sold out.'
+        code: 'PRODUCT_OUT_OF_STOCK',
+        legacyCode: 'PRODUCT_SOLD_OUT',
+        message: 'Sorry, this product is currently out of stock at this branch.'
       });
     }
 
@@ -576,5 +578,33 @@ exports.clearCart = async (req, res) => {
       error: error.message
     });
   }
+};
+
+/**
+ * Release all expired reservations (TTL cleanup)
+ * Finds reservations in 'reserved' status where expiresAt <= now,
+ * marks them as 'expired', and restores reservedQuantity in BranchInventory.
+ */
+exports.releaseExpiredReservations = async () => {
+  const now = new Date();
+  const expiredReservations = await Reservation.find({
+    status: 'reserved',
+    expiresAt: { $lte: now }
+  });
+
+  let count = 0;
+  for (const res of expiredReservations) {
+    res.status = 'expired';
+    res.releasedAt = now;
+    await res.save();
+
+    await BranchInventory.updateOne(
+      { branchId: res.branchId, productId: res.productId },
+      { $inc: { reservedQuantity: -res.quantity } }
+    );
+    count++;
+  }
+
+  return count;
 };
 

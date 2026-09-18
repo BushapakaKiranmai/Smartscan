@@ -8,8 +8,10 @@ const Cart = require('../models/Cart');
 const Reservation = require('../models/Reservation');
 const Transaction = require('../models/Transaction');
 const ExitPass = require('../models/ExitPass');
+const User = require('../models/User');
+const authService = require('../services/authService');
 
-jest.setTimeout(40000);
+jest.setTimeout(60000);
 
 describe('SmartScan Pay — Cart Single-Item & Concurrency-Safe Inventory Reservation Suite', () => {
   let customerAToken = null;
@@ -271,8 +273,8 @@ describe('SmartScan Pay — Cart Single-Item & Concurrency-Safe Inventory Reserv
 
     expect(successRes.body.success).toBe(true);
     expect(rejectedRes.body.success).toBe(false);
-    expect(rejectedRes.body.code).toBe('PRODUCT_SOLD_OUT');
-    expect(rejectedRes.body.message).toBe('Product not found or sold out.');
+    expect(['PRODUCT_OUT_OF_STOCK', 'PRODUCT_SOLD_OUT']).toContain(rejectedRes.body.code);
+    expect(rejectedRes.body.message).toMatch(/(out of stock|sold out)/i);
 
     // Only 1 reservation was created for either Customer A or Customer B
     const activeReservations = await Reservation.find({
@@ -307,7 +309,7 @@ describe('SmartScan Pay — Cart Single-Item & Concurrency-Safe Inventory Reserv
       .set('Authorization', `Bearer ${customerBToken}`)
       .send({ barcode: '8901063371040', branchId: 'dmart-kukatpally' });
     expect(failB.statusCode).toBe(409);
-    expect(failB.body.code).toBe('PRODUCT_SOLD_OUT');
+    expect(['PRODUCT_OUT_OF_STOCK', 'PRODUCT_SOLD_OUT']).toContain(failB.body.code);
 
     // Customer A removes item
     const removeA = await request(app)
@@ -421,8 +423,8 @@ describe('SmartScan Pay — Cart Single-Item & Concurrency-Safe Inventory Reserv
 
     expect(res.statusCode).toBe(409);
     expect(res.body.success).toBe(false);
-    expect(res.body.code).toBe('PRODUCT_SOLD_OUT');
-    expect(res.body.message).toBe('Product not found or sold out.');
+    expect(['PRODUCT_OUT_OF_STOCK', 'PRODUCT_SOLD_OUT']).toContain(res.body.code);
+    expect(res.body.message).toMatch(/(out of stock|sold out)/i);
   });
 
   // =========================================================================
@@ -572,5 +574,212 @@ describe('SmartScan Pay — Cart Single-Item & Concurrency-Safe Inventory Reserv
     expect(cartA.statusCode).toBe(200);
     expect(cartA.body.cart.items.length).toBe(1);
     expect(cartA.body.cart.items[0].barcode).toBe('8901063371040');
+  });
+
+  // =========================================================================
+  // TEST 13 — 3 distinct users compete for Stock = 2
+  // User A and User B reserve -> success, Remaining stock = 0
+  // User C scans -> HTTP 409 PRODUCT_OUT_OF_STOCK
+  // =========================================================================
+  it('TEST 13: 3 distinct users compete for Stock = 2 -> User A & B succeed, User C gets 409 PRODUCT_OUT_OF_STOCK', async () => {
+    // 1. Setup Customer C
+    const phoneC = `+9197${Math.floor(10000000 + Math.random() * 90000000)}`;
+    const regC = await request(app)
+      .post('/api/v1/auth/register')
+      .send({
+        name: 'Customer C',
+        phone: phoneC,
+        email: `customerc_${Date.now()}@smartscanpay.local`,
+        password: 'Password123!'
+      });
+    expect(regC.statusCode).toBe(201);
+    const customerCToken = regC.body.token || regC.body.data?.token;
+    const customerCId = regC.body.user?._id || regC.body.data?.user?._id;
+
+    // Set initial branch inventory: stockQuantity = 2, reservedQuantity = 0
+    await BranchInventory.findOneAndUpdate(
+      { branchId: 'dmart-kukatpally', productId: marieGoldProduct._id },
+      { stockQuantity: 2, reservedQuantity: 0, available: true }
+    );
+
+    // Customer A scans Marie Gold -> reserve 1 unit
+    const scanA = await request(app)
+      .post('/api/v1/cart/items')
+      .set('Authorization', `Bearer ${customerAToken}`)
+      .send({ barcode: '8901063371040', branchId: 'dmart-kukatpally' });
+    expect(scanA.statusCode).toBe(200);
+    expect(scanA.body.cart.items[0].quantity).toBe(1);
+
+    // Customer B scans Marie Gold -> reserve another 1 unit
+    const scanB = await request(app)
+      .post('/api/v1/cart/items')
+      .set('Authorization', `Bearer ${customerBToken}`)
+      .send({ barcode: '8901063371040', branchId: 'dmart-kukatpally' });
+    expect(scanB.statusCode).toBe(200);
+    expect(scanB.body.cart.items[0].quantity).toBe(1);
+
+    // Verify DB state: stock = 2, reserved = 2, remaining available = 0
+    const invMid = await BranchInventory.findOne({
+      branchId: 'dmart-kukatpally',
+      productId: marieGoldProduct._id
+    });
+    expect(invMid.stockQuantity).toBe(2);
+    expect(invMid.reservedQuantity).toBe(2);
+
+    // Customer C scans Marie Gold -> REJECTED (HTTP 409 PRODUCT_OUT_OF_STOCK)
+    const scanC = await request(app)
+      .post('/api/v1/cart/items')
+      .set('Authorization', `Bearer ${customerCToken}`)
+      .send({ barcode: '8901063371040', branchId: 'dmart-kukatpally' });
+
+    expect(scanC.statusCode).toBe(409);
+    expect(scanC.body.success).toBe(false);
+    expect(['PRODUCT_OUT_OF_STOCK', 'PRODUCT_SOLD_OUT']).toContain(scanC.body.code);
+    expect(scanC.body.message).toMatch(/(out of stock|sold out)/i);
+
+    // User C must NOT get the product in the cart
+    const cartC = await Cart.findOne({ user: customerCId });
+    expect(cartC?.items?.length || 0).toBe(0);
+
+    // Final DB state verification: total reserved remains 2 <= stock 2
+    const invFinal = await BranchInventory.findOne({
+      branchId: 'dmart-kukatpally',
+      productId: marieGoldProduct._id
+    });
+    expect(invFinal.stockQuantity).toBe(2);
+    expect(invFinal.reservedQuantity).toBe(2);
+
+    // Cleanup Customer C
+    await Cart.deleteMany({ user: customerCId });
+    await Reservation.deleteMany({ userId: customerCId });
+  });
+
+  // =========================================================================
+  // TEST 14 — High concurrency: 20 simultaneous users compete for Stock = 10
+  // Exactly 10 succeed, exactly 10 rejected, total_reserved <= stock
+  // =========================================================================
+  it('TEST 14: High concurrency -> 20 simultaneous users for Stock = 10: exactly 10 succeed, exactly 10 rejected', async () => {
+    const totalUsers = 20;
+    const initialStock = 10;
+
+    // Set initial branch inventory: stockQuantity = 10, reservedQuantity = 0
+    await BranchInventory.findOneAndUpdate(
+      { branchId: 'dmart-kukatpally', productId: marieGoldProduct._id },
+      { stockQuantity: initialStock, reservedQuantity: 0, available: true }
+    );
+
+    // Create 20 distinct users directly and generate JWT tokens
+    const userTokens = [];
+    const userIds = [];
+    for (let i = 0; i < totalUsers; i++) {
+      const phone = `+9180${Math.floor(10000000 + Math.random() * 90000000)}`;
+      const user = await User.create({
+        name: `Concurrent User ${i}`,
+        phone,
+        email: `concur_${i}_${Date.now()}_${Math.floor(Math.random() * 10000)}@smartscanpay.local`,
+        password: 'Password123!',
+        isVerified: true
+      });
+      const token = authService.generateToken(user);
+      userTokens.push(token);
+      userIds.push(user._id);
+    }
+
+    // Fire 20 simultaneous add-to-cart requests for Marie Gold
+    const concurrentRequests = userTokens.map((token) =>
+      request(app)
+        .post('/api/v1/cart/items')
+        .set('Authorization', `Bearer ${token}`)
+        .send({ barcode: '8901063371040', branchId: 'dmart-kukatpally' })
+    );
+
+    const responses = await Promise.all(concurrentRequests);
+
+    const successful = responses.filter((r) => r.statusCode === 200);
+    const rejected = responses.filter((r) => r.statusCode === 409);
+
+    // Assertions:
+    // Exactly 10 succeed
+    expect(successful.length).toBe(initialStock);
+    // Exactly 10 rejected
+    expect(rejected.length).toBe(totalUsers - initialStock);
+
+    // Verify all rejected requests received out-of-stock codes
+    for (const rej of rejected) {
+      expect(['PRODUCT_OUT_OF_STOCK', 'PRODUCT_SOLD_OUT']).toContain(rej.body.code);
+    }
+
+    // Verify database state: total_reserved must EQUAL 10 and NEVER exceed stock
+    const inv = await BranchInventory.findOne({
+      branchId: 'dmart-kukatpally',
+      productId: marieGoldProduct._id
+    });
+    expect(inv.stockQuantity).toBe(10);
+    expect(inv.reservedQuantity).toBe(10);
+    expect(inv.reservedQuantity).toBeLessThanOrEqual(inv.stockQuantity);
+
+    // Count actual active reservations in Reservation collection
+    const activeReservations = await Reservation.find({
+      branchId: 'dmart-kukatpally',
+      productId: marieGoldProduct._id,
+      status: 'reserved'
+    });
+    expect(activeReservations.length).toBe(10);
+
+    // Cleanup 20 test users
+    await Cart.deleteMany({ user: { $in: userIds } });
+    await Reservation.deleteMany({ userId: { $in: userIds } });
+    await User.deleteMany({ _id: { $in: userIds } });
+  });
+
+  // =========================================================================
+  // TEST 15 — Expired reservations cleanup
+  // =========================================================================
+  it('TEST 15: Expired reservations -> releaseExpiredReservations frees reserved units back to available', async () => {
+    const { releaseExpiredReservations } = require('../controllers/cartController');
+
+    // Stock = 2, reserved = 0
+    await BranchInventory.findOneAndUpdate(
+      { branchId: 'dmart-kukatpally', productId: marieGoldProduct._id },
+      { stockQuantity: 2, reservedQuantity: 0, available: true }
+    );
+
+    // Customer A reserves 1
+    const resA = await request(app)
+      .post('/api/v1/cart/items')
+      .set('Authorization', `Bearer ${customerAToken}`)
+      .send({ barcode: '8901063371040', branchId: 'dmart-kukatpally' });
+    expect(resA.statusCode).toBe(200);
+
+    // Check reservedQuantity is 1
+    const invBefore = await BranchInventory.findOne({
+      branchId: 'dmart-kukatpally',
+      productId: marieGoldProduct._id
+    });
+    expect(invBefore.reservedQuantity).toBe(1);
+
+    // Simulate reservation expiration: set expiresAt to 10 minutes in the past
+    await Reservation.updateOne(
+      { userId: customerAId, productId: marieGoldProduct._id, status: 'reserved' },
+      { expiresAt: new Date(Date.now() - 10 * 60 * 1000) }
+    );
+
+    // Run expiration release
+    const releasedCount = await releaseExpiredReservations();
+    expect(releasedCount).toBeGreaterThanOrEqual(1);
+
+    // Branch inventory reservedQuantity restored to 0
+    const invAfter = await BranchInventory.findOne({
+      branchId: 'dmart-kukatpally',
+      productId: marieGoldProduct._id
+    });
+    expect(invAfter.reservedQuantity).toBe(0);
+
+    // Customer B can now reserve the unit
+    const resB = await request(app)
+      .post('/api/v1/cart/items')
+      .set('Authorization', `Bearer ${customerBToken}`)
+      .send({ barcode: '8901063371040', branchId: 'dmart-kukatpally' });
+    expect(resB.statusCode).toBe(200);
   });
 });
