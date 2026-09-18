@@ -117,7 +117,13 @@ export const CheckoutPage = () => {
       setLoading(true);
       const res = await api.post('/payments/create-order', { orderId: order._id || order.id });
       const pData = res.data || res;
-      setPaymentData(pData);
+      setPaymentData({
+        ...pData,
+        orderId: order._id || order.id,
+        razorpayOrderId: pData?.razorpayOrderId || pData?.data?.razorpayOrderId || pData?.razorpayOrder?.id,
+        keyId: pData?.keyId || pData?.key || pData?.data?.keyId,
+        amountPaise: pData?.amountPaise || pData?.data?.amountPaise || Math.round((order.totalAmount || 0) * 100)
+      });
       setShowPaymentModal(true);
     } catch (err) {
       toast.error(err.message || 'Failed to initialize payment gateway.');

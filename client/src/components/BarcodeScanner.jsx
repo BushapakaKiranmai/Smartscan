@@ -29,6 +29,8 @@ export const BarcodeScanner = ({
   const [retryCount, setRetryCount] = useState(0);
   const [torchSupported, setTorchSupported] = useState(false);
   const [torchOn, setTorchOn] = useState(false);
+  const [zoomSupported, setZoomSupported] = useState(false);
+  const [zoomLevel, setZoomLevel] = useState(1);
 
   const videoRef = useRef(null);
   const engineRef = useRef(null);
@@ -138,6 +140,7 @@ export const BarcodeScanner = ({
         onVideoStats: (stats) => {
           if (!cancelled && generationRef.current === currentGen) {
             setTorchSupported(stats.hasTorch);
+            setZoomSupported(Boolean(stats.hasZoom));
             if (onVideoStatsUpdateRef.current) {
               onVideoStatsUpdateRef.current(stats);
             }
@@ -168,6 +171,7 @@ export const BarcodeScanner = ({
               setCameraError(null);
               if (engine) {
                 setTorchSupported(engine.hasTorchSupport());
+                setZoomSupported(engine.hasZoomSupport());
               }
             } else if (status === 'STOPPED') {
               setCameraActive(false);
@@ -238,6 +242,14 @@ export const BarcodeScanner = ({
       const state = await engineRef.current.toggleTorch();
       setTorchOn(state);
     }
+  };
+
+  // Zoom Toggle (Cycles 1x -> 1.5x -> 2x)
+  const handleToggleZoom = async () => {
+    if (!engineRef.current || !zoomSupported) return;
+    const nextZoom = zoomLevel === 1 ? 1.5 : zoomLevel === 1.5 ? 2 : 1;
+    await engineRef.current.setZoom(nextZoom);
+    setZoomLevel(nextZoom);
   };
 
   // Manual code submission
@@ -355,12 +367,41 @@ export const BarcodeScanner = ({
             <Icons.Zap size={18} />
           </button>
         )}
+
+        {/* 1x / 2x Zoom Toggle for 50MP Samsung/Android cameras */}
+        {zoomSupported && scannerMode === 'camera' && (
+          <button
+            type="button"
+            onClick={handleToggleZoom}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              padding: '4px 10px',
+              borderRadius: 'var(--radius-full)',
+              border: '1.5px solid var(--border-card)',
+              background: zoomLevel > 1 ? 'var(--primary)' : 'rgba(255, 255, 255, 0.08)',
+              color: zoomLevel > 1 ? '#ffffff' : 'var(--text-primary)',
+              fontSize: '0.76rem',
+              fontWeight: 800,
+              cursor: 'pointer',
+              transition: 'all var(--transition-fast)'
+            }}
+            title="Toggle Camera Zoom"
+          >
+            <span>{zoomLevel}x</span>
+          </button>
+        )}
       </div>
 
       {/* Mode 1: Live Camera Viewfinder */}
       {scannerMode === 'camera' && (
         <div style={{ width: '100%', maxWidth: '440px', marginBottom: '14px' }}>
           <div
+            onClick={() => {
+              if (engineRef.current) {
+                engineRef.current.triggerAutofocus();
+              }
+            }}
             style={{
               position: 'relative',
               borderRadius: '24px',

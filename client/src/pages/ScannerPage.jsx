@@ -104,31 +104,25 @@ export const ScannerPage = () => {
         return;
       }
 
-      // Duplicate scan prevention: ignore rapid duplicate frames of the same physical barcode within 2.8s
-      // 1 successful barcode scan = exactly 1 physical item.
-      // Repeated camera frames of the same barcode while held in view are debounced.
+      // Duplicate scan prevention:
+      // Same barcode held in view is debounced for 1.2s to prevent duplicate cart additions.
+      // Different barcode has 0 ms cooldown (can be scanned immediately!)
       const now = Date.now();
-      const SAME_BARCODE_COOLDOWN_MS = 2800;
+      const SAME_BARCODE_COOLDOWN_MS = 1200;
       if (
         lastScannedBarcodeRef.current === cleanBarcode &&
         now - lastScanTimeRef.current < SAME_BARCODE_COOLDOWN_MS
       ) {
-        // Continuous camera frames of the same physical item
         return;
       }
 
-      // Lock scanner for active item resolution
+      // Lock scanner during active product resolution
       isProcessingRef.current = true;
       lastScannedBarcodeRef.current = cleanBarcode;
       lastScanTimeRef.current = now;
 
-      setScanState('DETECTED');
-      setScanErrorMsg(null);
-      setLastFailedBarcode(null);
-
       try {
         // Step 1: Lookup Product
-        setScanState('LOOKING_UP');
         const activeBranchId = selectedBranch?._id || 'dmart-kukatpally';
         console.log(`[API] GET /api/v1/products/barcode/${cleanBarcode}?branchId=${activeBranchId}`);
 
@@ -144,11 +138,9 @@ export const ScannerPage = () => {
           throw notRegisteredError;
         }
 
-        // Step 2: Product Found
-        setScanState('PRODUCT_FOUND');
         console.log('[SCANNER] Product verified:', product.name, `₹${product.price}`);
 
-        // Step 3: Branch Availability Check
+        // Step 2: Branch Availability Check
         const branchAvail = res?.branchAvailability || res?.data?.branchAvailability;
         const isBranchAvailable = branchAvail !== undefined
           ? Boolean(branchAvail.available)
@@ -173,17 +165,14 @@ export const ScannerPage = () => {
           errorTimerRef.current = setTimeout(() => {
             setScanErrorMsg(null);
             setUnavailableProduct(null);
-            setScanState('READY');
-            setTimeout(() => {
-              setScanState('SCANNING');
-              isProcessingRef.current = false;
-            }, 150);
-          }, 3500);
+            setScanState('SCANNING');
+            isProcessingRef.current = false;
+          }, 2500);
 
           return;
         }
 
-        // Step 4: Available Stock Validation
+        // Step 3: Available Stock Validation
         const availableStock =
           branchAvail?.stock !== undefined && branchAvail?.stock !== null
             ? Number(branchAvail.stock)
@@ -205,17 +194,15 @@ export const ScannerPage = () => {
           }
 
           errorTimerRef.current = setTimeout(() => {
-            setScanState('READY');
-            setTimeout(() => {
-              setScanState('SCANNING');
-              isProcessingRef.current = false;
-            }, 150);
-          }, 1800);
+            setScanErrorMsg(null);
+            setScanState('SCANNING');
+            isProcessingRef.current = false;
+          }, 1500);
 
           return;
         }
 
-        // Step 5: Check Current Cart Limit (ONE USER + ONE PRODUCT = MAXIMUM ONE ITEM)
+        // Step 4: Check Current Cart Limit (ONE USER + ONE PRODUCT = MAXIMUM ONE ITEM)
         const existingInCart = items.find(
           (item) =>
             (cleanBarcode && item.barcode === cleanBarcode) ||
@@ -234,19 +221,15 @@ export const ScannerPage = () => {
           }
 
           errorTimerRef.current = setTimeout(() => {
-            setScanState('READY');
-            setTimeout(() => {
-              setScanState('SCANNING');
-              isProcessingRef.current = false;
-            }, 150);
-          }, 1800);
+            setScanErrorMsg(null);
+            setScanState('SCANNING');
+            isProcessingRef.current = false;
+          }, 1500);
 
           return;
         }
 
-        // Step 6: Add Product to Cart
-        setScanState('ADDING_TO_CART');
-
+        // Step 5: Add Product to Cart
         const prodData = {
           product,
           barcode: product.barcode || cleanBarcode,
@@ -259,7 +242,7 @@ export const ScannerPage = () => {
         await addItem(cleanBarcode, product._id || product.id, 1, prodData);
         console.log('[CART] Product added to cart:', product.name);
 
-        // Step 7: Product Added & Small Success Notification
+        // Step 6: Product Added & Small Success Notification
         setScanState('PRODUCT_ADDED');
 
         const newTotalCount = itemCount + 1;
@@ -284,15 +267,12 @@ export const ScannerPage = () => {
           setScanSuccessInfo(null);
         }, 3000);
 
-        // Step 8: Return Scanner to READY → SCANNING (Keep Camera Open)
+        // Step 7: Return Scanner to SCANNING (Keep Camera Open)
         setTimeout(() => {
-          setScanState('READY');
-          setTimeout(() => {
-            setScanState('SCANNING');
-            isProcessingRef.current = false;
-            console.log('[SCANNER] Ready for next product scan');
-          }, 150);
-        }, 250);
+          setScanState('SCANNING');
+          isProcessingRef.current = false;
+          console.log('[SCANNER] Ready for next product scan');
+        }, 200);
 
       } catch (err) {
         console.error('[SCANNER] Barcode processing error:', err);
@@ -319,7 +299,7 @@ export const ScannerPage = () => {
             String(err?.message || '').toLowerCase().includes('not found');
 
           if (isNotFound) {
-            const message = 'Product not found or sold out.';
+            const message = 'Product not found. Try again or use Keypad.';
             console.warn(`[API] barcode = ${cleanBarcode} - ${message}`);
             setScanErrorMsg(message);
             setScanState('ERROR');
@@ -338,12 +318,9 @@ export const ScannerPage = () => {
 
         errorTimerRef.current = setTimeout(() => {
           setScanErrorMsg(null);
-          setScanState('READY');
-          setTimeout(() => {
-            setScanState('SCANNING');
-            isProcessingRef.current = false;
-          }, 150);
-        }, 2000);
+          setScanState('SCANNING');
+          isProcessingRef.current = false;
+        }, 1500);
       }
     },
     [addItem, items, itemCount, totalAmount, soundEnabled, selectedBranch, toast]

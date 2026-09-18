@@ -15,8 +15,8 @@ import Icons from './Icons';
  */
 export const RazorpayModal = ({ order, paymentData, onPaymentSuccess, onCancel }) => {
   const [paymentState, setPaymentState] = useState('PAYMENT_PENDING');
-  // 'google_pay' | 'phonepe' | 'other_upi' | 'upi_qr' | 'card' | 'netbanking'
-  const [selectedMethod, setSelectedMethod] = useState('google_pay');
+  // 'card' | 'netbanking' | 'all_methods' | 'other_upi' | 'google_pay' | 'phonepe' | 'upi_qr'
+  const [selectedMethod, setSelectedMethod] = useState('card');
   const [failureReason, setFailureReason] = useState('');
   const [verifiedResponse, setVerifiedResponse] = useState(null);
   const [isSimulating, setIsSimulating] = useState(false);
@@ -39,11 +39,24 @@ export const RazorpayModal = ({ order, paymentData, onPaymentSuccess, onCancel }
     customKeyId.trim() ||
     paymentData?.keyId ||
     paymentData?.key ||
+    paymentData?.data?.keyId ||
     import.meta.env.VITE_RAZORPAY_KEY_ID ||
     ''
   ).trim();
 
   const isKeyPlaceholder = !activeKeyId || activeKeyId.includes('placeholder');
+  const isTestMode = activeKeyId.startsWith('rzp_test_');
+
+  // Resolve Razorpay gateway Order ID robustly from all server response shapes
+  const actualRzOrderId = (
+    paymentData?.razorpayOrderId ||
+    paymentData?.razorpayOrder?.id ||
+    paymentData?.data?.razorpayOrderId ||
+    paymentData?.id ||
+    order?.razorpayOrderId
+  );
+  const isMock = typeof actualRzOrderId === 'string' && actualRzOrderId.startsWith('order_mock_');
+  const rzOrderId = (!isMock && actualRzOrderId) || undefined;
 
   // Detect mobile viewport
   const isMobile = typeof window !== 'undefined' && (
@@ -51,14 +64,18 @@ export const RazorpayModal = ({ order, paymentData, onPaymentSuccess, onCancel }
     /Android|iPhone|iPad|iPod|Opera Mini|IEMobile|WPDesktop/i.test(navigator.userAgent)
   );
 
-  // Default to UPI QR on desktop, Google Pay on mobile
+  // Set default payment method:
+  // - In Test Mode: default to 'card' (or 'all_methods') to prevent doomed native UPI app intents on mobile.
+  // - In Live Mode: default to 'upi_qr' on desktop, 'google_pay' on mobile.
   useEffect(() => {
-    if (!isMobile) {
+    if (isTestMode) {
+      setSelectedMethod('card');
+    } else if (!isMobile) {
       setSelectedMethod('upi_qr');
     } else {
       setSelectedMethod('google_pay');
     }
-  }, [isMobile]);
+  }, [isMobile, isTestMode]);
 
   // Cleanup Razorpay on unmount
   useEffect(() => {
@@ -93,7 +110,7 @@ export const RazorpayModal = ({ order, paymentData, onPaymentSuccess, onCancel }
       const payload = {
         orderId: orderId,
         transactionId: orderId,
-        razorpay_order_id: providerDetails.razorpay_order_id || paymentData?.razorpayOrderId,
+        razorpay_order_id: providerDetails.razorpay_order_id || rzOrderId || paymentData?.razorpayOrderId,
         razorpay_payment_id: providerDetails.razorpay_payment_id,
         razorpay_signature: providerDetails.razorpay_signature,
         upiTransactionRef: providerDetails.upiTransactionRef
@@ -149,8 +166,16 @@ export const RazorpayModal = ({ order, paymentData, onPaymentSuccess, onCancel }
     setPaymentState('OPENING_GATEWAY');
 
     try {
-      const isMock = paymentData?.razorpayOrderId?.startsWith('order_mock_');
-      const rzOrderId = isMock ? undefined : paymentData?.razorpayOrderId;
+      // Extract customer details cleanly
+      let storedUser = null;
+      try {
+        storedUser = JSON.parse(localStorage.getItem('smartscan_user') || 'null');
+      } catch {}
+
+      const customerName = order?.user?.name || storedUser?.name || 'SmartScan Customer';
+      const customerEmail = order?.user?.email || storedUser?.email || 'customer@smartscanpay.local';
+      const rawPhone = order?.user?.phone || storedUser?.phone || '9999911111';
+      const customerContact = String(rawPhone).replace(/\D/g, '').slice(-10) || '9999911111';
 
       // Base Razorpay Standard Checkout options
       const options = {
@@ -161,9 +186,9 @@ export const RazorpayModal = ({ order, paymentData, onPaymentSuccess, onCancel }
         description: `Order #${String(orderId).slice(-6).toUpperCase()}`,
         order_id: rzOrderId,
         prefill: {
-          name: order?.user?.name || 'SmartScan Customer',
-          email: order?.user?.email || 'customer@smartscanpay.local',
-          contact: order?.user?.phone || '+919999911111'
+          name: customerName,
+          email: customerEmail,
+          contact: customerContact
         },
         theme: { color: '#059669' },
         modal: {
@@ -175,23 +200,34 @@ export const RazorpayModal = ({ order, paymentData, onPaymentSuccess, onCancel }
         },
         handler: async (response) => {
           console.log('[Razorpay] Payment captured by SDK. Invoking backend verification...');
+          console.log('[Razorpay] Payment ID:', response.razorpay_payment_id);
+          console.log('[Razorpay] Order ID:', response.razorpay_order_id || rzOrderId);
           isSubmittingRef.current = false;
           await handleVerifyPayment({
             razorpay_payment_id: response.razorpay_payment_id,
-            razorpay_order_id: response.razorpay_order_id,
+            razorpay_order_id: response.razorpay_order_id || rzOrderId,
             razorpay_signature: response.razorpay_signature
           });
         }
       };
 
-      // Pre-select payment method cleanly via Razorpay Checkout standard prefill.method
-      // (Avoids unsupported client-side intent filter blocks that trigger gateway failures)
-      if (selectedMethod === 'google_pay' || selectedMethod === 'phonepe' || selectedMethod === 'other_upi' || selectedMethod === 'upi_qr') {
-        options.prefill.method = 'upi';
-      } else if (selectedMethod === 'card') {
+      // Method-specific routing
+      if (selectedMethod === 'card') {
         options.prefill.method = 'card';
       } else if (selectedMethod === 'netbanking') {
         options.prefill.method = 'netbanking';
+      } else if (selectedMethod === 'all_methods') {
+        // Open Razorpay's full standard checkout grid with all options
+      } else if (selectedMethod === 'google_pay' || selectedMethod === 'phonepe' || selectedMethod === 'other_upi' || selectedMethod === 'upi_qr') {
+        if (isTestMode) {
+          // In Razorpay Test Mode, real UPI apps reject sandbox intents.
+          // Pre-filling with official test VPA triggers test UPI simulation without launching broken native app intent.
+          options.prefill.method = 'upi';
+          options.prefill.vpa = 'success@razorpay';
+        } else {
+          // In Live mode, standard UPI intent triggers installed UPI apps on mobile device
+          options.prefill.method = 'upi';
+        }
       }
 
       const rzp = new window.Razorpay(options);
@@ -255,10 +291,47 @@ export const RazorpayModal = ({ order, paymentData, onPaymentSuccess, onCancel }
   // Payment Methods Data
   const paymentMethods = [
     {
+      id: 'card',
+      name: 'Card',
+      subtitle: isTestMode ? 'Test Cards (Instant Simulation)' : 'Credit or Debit (Visa, MasterCard, RuPay)',
+      tag: isTestMode ? '⚡ Test Ready' : 'Cards',
+      icon: <Icons.CreditCard size={22} />
+    },
+    {
+      id: 'netbanking',
+      name: 'Net Banking',
+      subtitle: isTestMode ? 'Test Bank (Instant 1-Click Approval)' : 'SBI, HDFC, ICICI, Axis & 50+ banks',
+      tag: isTestMode ? '⚡ Test Ready' : 'All Banks',
+      icon: (
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M3 21h18M3 10h18M5 6l7-3 7 3M4 10v11M20 10v11M8 14v4M12 14v4M16 14v4" />
+        </svg>
+      )
+    },
+    {
+      id: 'all_methods',
+      name: 'All Payment Methods',
+      subtitle: 'Opens Razorpay hosted modal with all options',
+      tag: 'Razorpay Gateway',
+      icon: <Icons.ShieldCheck size={22} />
+    },
+    {
+      id: 'other_upi',
+      name: 'Test UPI (VPA)',
+      subtitle: isTestMode ? 'Auto-fills test VPA: success@razorpay' : 'Paytm, BHIM, CRED & any installed app',
+      tag: isTestMode ? '⚡ Test VPA' : 'UPI Intent',
+      icon: (
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <rect width="14" height="20" x="5" y="2" rx="2" ry="2" />
+          <path d="M12 18h.01" />
+        </svg>
+      )
+    },
+    {
       id: 'google_pay',
       name: 'Google Pay',
-      subtitle: isMobile ? 'Tap to open Google Pay' : 'UPI Intent on supported device',
-      tag: 'Instant UPI',
+      subtitle: isTestMode ? 'Live Mode Only (Uses test VPA in sandbox)' : (isMobile ? 'Tap to open Google Pay' : 'UPI Intent on supported device'),
+      tag: isTestMode ? 'Live Intent' : 'Instant UPI',
       icon: (
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
           <rect width="24" height="24" rx="6" fill="#F8FAFC" />
@@ -270,49 +343,12 @@ export const RazorpayModal = ({ order, paymentData, onPaymentSuccess, onCancel }
     {
       id: 'phonepe',
       name: 'PhonePe',
-      subtitle: isMobile ? 'Tap to open PhonePe' : 'UPI Intent on supported device',
-      tag: 'Instant UPI',
+      subtitle: isTestMode ? 'Live Mode Only (Uses test VPA in sandbox)' : (isMobile ? 'Tap to open PhonePe' : 'UPI Intent on supported device'),
+      tag: isTestMode ? 'Live Intent' : 'Instant UPI',
       icon: (
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
           <rect width="24" height="24" rx="6" fill="#6739B7" />
           <text x="7" y="17" fill="#FFFFFF" fontSize="13" fontWeight="900" fontFamily="sans-serif">पे</text>
-        </svg>
-      )
-    },
-    {
-      id: 'other_upi',
-      name: 'Other UPI Apps',
-      subtitle: 'Paytm, BHIM, CRED & any installed app',
-      tag: 'UPI Intent',
-      icon: (
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <rect width="14" height="20" x="5" y="2" rx="2" ry="2" />
-          <path d="M12 18h.01" />
-        </svg>
-      )
-    },
-    {
-      id: 'upi_qr',
-      name: 'UPI QR Code',
-      subtitle: isMobile ? 'Scan with a 2nd phone or tablet' : 'Scan using any UPI app on your phone',
-      tag: isMobile ? '2nd Phone' : 'Recommended',
-      icon: <Icons.QrCode size={22} />
-    },
-    {
-      id: 'card',
-      name: 'Card',
-      subtitle: 'Credit or Debit (Visa, MasterCard, RuPay)',
-      tag: 'Cards',
-      icon: <Icons.CreditCard size={22} />
-    },
-    {
-      id: 'netbanking',
-      name: 'Net Banking',
-      subtitle: 'SBI, HDFC, ICICI, Axis & 50+ banks',
-      tag: 'All Banks',
-      icon: (
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M3 21h18M3 10h18M5 6l7-3 7 3M4 10v11M20 10v11M8 14v4M12 14v4M16 14v4" />
         </svg>
       )
     }
@@ -620,7 +656,7 @@ export const RazorpayModal = ({ order, paymentData, onPaymentSuccess, onCancel }
           /* VIEW 4: METHOD SELECTION & PAY BUTTON                */
           /* ==================================================== */
           <div>
-            {activeKeyId.startsWith('rzp_test_') && (
+            {isTestMode && (
               <div
                 style={{
                   padding: '10px 12px',
@@ -637,7 +673,7 @@ export const RazorpayModal = ({ order, paymentData, onPaymentSuccess, onCancel }
                   <span>⚡ Razorpay Test Mode Active</span>
                 </div>
                 <div>
-                  Real UPI apps cannot process live sandbox payments. For test payment, select <strong>Other UPI Apps</strong> and enter test VPA <code style={{ color: '#2563eb', fontWeight: 700 }}>success@razorpay</code>, use <strong>Card</strong> (test cards), or click below to simulate.
+                  Real UPI apps (Google Pay, PhonePe) do not process test sandbox transactions. For testing, use <strong>Card</strong> (test cards), <strong>Net Banking</strong> (simulated bank), or <strong>Test UPI</strong> (<code>success@razorpay</code>).
                 </div>
               </div>
             )}
@@ -757,12 +793,23 @@ export const RazorpayModal = ({ order, paymentData, onPaymentSuccess, onCancel }
             >
               <Icons.Info size={16} color="var(--primary)" style={{ flexShrink: 0 }} />
               <span>
-                {selectedMethod === 'google_pay' && 'Google Pay UPI Intent flow. Opens GPay app directly on your device.'}
-                {selectedMethod === 'phonepe' && 'PhonePe UPI Intent flow. Opens PhonePe app directly on your device.'}
-                {selectedMethod === 'other_upi' && 'Supported UPI selector. Choose any installed UPI app (Paytm, BHIM, CRED).'}
+                {selectedMethod === 'card' && (isTestMode
+                  ? 'Test Mode: Uses Razorpay Test Cards. Enter any future MM/YY and CVV 123 to complete instant test checkout.'
+                  : 'Pay via Debit or Credit Card with 3D Secure OTP authentication.')}
+                {selectedMethod === 'netbanking' && (isTestMode
+                  ? 'Test Mode: Select any test bank (SBI, HDFC, ICICI) and click "Success" on the simulated bank page.'
+                  : 'Pay securely via your bank portal with instant confirmation.')}
+                {selectedMethod === 'all_methods' && 'Opens the full Razorpay gateway selector with Cards, Net Banking, and UPI.'}
+                {selectedMethod === 'other_upi' && (isTestMode
+                  ? 'Test Mode: Uses Razorpay sandbox VPA (success@razorpay) for instant simulation.'
+                  : 'Supported UPI selector. Choose any installed UPI app (Paytm, BHIM, CRED).')}
+                {selectedMethod === 'google_pay' && (isTestMode
+                  ? 'Test Mode Notice: Real Google Pay cannot process test mode transactions. Uses test VPA (success@razorpay).'
+                  : 'Google Pay UPI Intent flow. Opens GPay app directly on your device.')}
+                {selectedMethod === 'phonepe' && (isTestMode
+                  ? 'Test Mode Notice: Real PhonePe cannot process test mode transactions. Uses test VPA (success@razorpay).'
+                  : 'PhonePe UPI Intent flow. Opens PhonePe app directly on your device.')}
                 {selectedMethod === 'upi_qr' && 'Generates official Razorpay Order QR code to scan from another device.'}
-                {selectedMethod === 'card' && 'Pay via Debit or Credit Card with 3D Secure OTP authentication.'}
-                {selectedMethod === 'netbanking' && 'Pay securely via your bank portal with instant confirmation.'}
               </span>
             </div>
 
